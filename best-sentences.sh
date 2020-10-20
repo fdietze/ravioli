@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -e # exit when one command fails
 
 CORPUS=$1
 
