@@ -1,58 +1,59 @@
-mod char_windows;
+mod ngrams;
 use std::cmp;
-mod skipgrams;
-use char_windows::grapheme_windows;
-use skipgrams::skipgrams_n;
+use std::iter;
+mod flexgrams;
+use flexgrams::flexgram_pattern;
+use ngrams::ngrams_iter;
 mod corpus;
 use corpus::Corpus;
-use rayon::prelude::*;
 use std::collections::HashMap;
+use std::time::Instant;
 
 fn main() {
-    let c = Corpus::from_file("../subtitles_de_10k.txt");
+    let c = Corpus::from_file("../subtitles_de_100k.txt");
     let threshold = 30;
-    let max_skipgram_gaps = 1;
+    let max_flexgram_chunks = 2;
 
     println!("extracting ngrams...");
-    let mut ngrams: Vec<HashMap<&str, Vec<&str>>> = Vec::new();
+    let mut ngrams: HashMap<&str, Vec<usize>> = HashMap::new();
+    let ngram_start = Instant::now();
     c.with_lines(|lines| {
         let mut size = 1;
         println!("size {}...", size);
 
-        let mut patterns: HashMap<&str, Vec<&str>> = HashMap::new();
-        for line in lines.iter() {
-            for ngram in grapheme_windows(&line, size) {
+        let ngram_start = Instant::now();
+        for (line_idx, line) in lines.iter().enumerate() {
+            for ngram in ngrams_iter(&line, size) {
                 // println!("{}", ngram);
-                (*patterns.entry(ngram).or_insert(vec![])).push(&line);
+                (*ngrams.entry(ngram).or_insert(vec![])).push(line_idx);
             }
         }
-        println!("  total: {}", patterns.len());
-        prune(&mut patterns, threshold);
-        println!("  kept: {}", patterns.len());
-        ngrams.push(patterns);
+
+        println!("  total: {}", ngrams.len());
+        prune(&mut ngrams, threshold);
+        println!("  kept: {}", ngrams.len());
+        println!("  took: {:?}", ngram_start.elapsed());
 
         loop {
-            let prev_patterns = &ngrams[size - 1];
-            // println!("{:?}", prev_patterns.keys());
+            let ngram_start = Instant::now();
+            let prev_count = ngrams.len();
             size += 1;
-            let mut patterns: HashMap<&str, Vec<&str>> = HashMap::new();
             println!("size {}...", size);
-            for line in lines.iter() {
-                for ngram in grapheme_windows(&line, size) {
-                    if grapheme_windows(&ngram, size - 1)
-                        .all(|ngram| prev_patterns.contains_key(ngram))
-                    {
-                        (*patterns.entry(ngram).or_insert(vec![])).push(&line);
+            for (line_idx, line) in lines.iter().enumerate() {
+                for ngram in ngrams_iter(&line, size) {
+                    if ngrams_iter(&ngram, size - 1).all(|ngram| ngrams.contains_key(ngram)) {
+                        (*ngrams.entry(ngram).or_insert(vec![])).push(line_idx);
                     }
                 }
             }
-            println!("  total: {}", patterns.len());
-            prune(&mut patterns, threshold);
-            println!("  kept: {}", patterns.len());
-            if patterns.len() == 0 {
+            println!("  total: {}", ngrams.len() - prev_count);
+            prune(&mut ngrams, threshold);
+            let kept = ngrams.len() - prev_count;
+            println!("  kept: {}", kept);
+            println!("  took: {:?}", ngram_start.elapsed());
+            if kept == 0 {
                 break;
             }
-            ngrams.push(patterns);
         }
 
         // let top = {
@@ -65,43 +66,61 @@ fn main() {
         //     println!("{}: {}", pattern, sentences.len());
         // }
     });
+    println!("all ngrams: {:?}", ngram_start.elapsed());
 
     let ngram_max_size = ngrams.len();
-    println!("extracting skipgrams...");
-    let mut skipgrams: HashMap<Vec<&str>, Vec<&str>> = HashMap::new();
+    println!("extracting flexgrams...");
+
+    let flexgram_start = Instant::now();
+    let mut flexgrams: HashMap<Vec<&str>, Vec<usize>> = HashMap::new();
     c.with_lines(|lines| {
         for size in 3..=ngram_max_size {
             println!("size {}...", size);
-            let max_gaps = cmp::min((size - 1) / 2, max_skipgram_gaps);
-            for gaps in 1..=max_gaps {
-                println!("  gaps {}...", gaps);
-                for line in lines.iter() {
-                    for ngram in grapheme_windows(&line, size) {
-                        for (skipgram, sizes) in skipgrams_n(ngram, gaps) {
-                            if skipgram
+            let max_chunks = cmp::min((size - 1) / 2 + 1, max_flexgram_chunks);
+            for chunks in 2..=max_chunks {
+                println!("  chunks {}...", chunks);
+                let flexgram_start = Instant::now();
+                let flexgram_pat = flexgram_pattern(size, chunks, ngram_max_size);
+                // println!("patterns: {:?}", flexgram_pat);
+                for (line_idx, line) in lines.iter().enumerate() {
+                    for ngram in ngrams_iter(&line, size) {
+                        //TODO: calculate only once per line, or even never, using bytes and
+                        //utf-8
+                        let indices: Vec<usize> = ngram
+                            .char_indices()
+                            .map(|(i, _)| i)
+                            .chain(iter::once(ngram.len()))
+                            .collect();
+                        flexgram_pat.iter().for_each(|pattern| {
+                            let flexgram = pattern
                                 .iter()
-                                .zip(sizes.iter())
-                                .all(|(ngram, charcount)| ngrams[charcount - 1].contains_key(ngram))
-                            {
-                                (*skipgrams.entry(skipgram).or_insert(vec![])).push(&line);
-                            }
-                        }
+                                .map(|(from, to)| &ngram[indices[*from]..indices[*to]])
+                                .collect();
+                            (*flexgrams.entry(flexgram).or_insert(vec![])).push(line_idx);
+                        })
+
+                        // for flexgram in flexgrams_iter(ngram, &flexgram_pat) {
+                        //     if flexgram.iter().all(|ngram| ngrams.contains_key(ngram)) {
+                        //         (*flexgrams.entry(flexgram).or_insert(vec![])).push(&line);
+                        //     }
+                        // }
                     }
                 }
-                println!("    total: {}", skipgrams.len());
-                prune(&mut skipgrams, threshold);
-                println!("    kept: {}", skipgrams.len());
-                if skipgrams.len() == 0 {
+                println!("    total: {}", flexgrams.len());
+                prune(&mut flexgrams, threshold);
+                println!("    kept: {}", flexgrams.len());
+                println!("    took: {:?}", flexgram_start.elapsed());
+                if flexgrams.len() == 0 {
                     break;
                 }
             }
         }
 
-        println!("printing top skipgrams...");
+        println!("printing top flexgrams...");
         let top = {
-            let mut counts: Vec<(&Vec<&str>, usize)> = skipgrams
+            let mut counts: Vec<(&Vec<&str>, usize)> = flexgrams
                 .iter()
-                .map(|(skipgram, sentences)| (skipgram, sentences.len()))
+                .map(|(flexgram, sentences)| (flexgram, sentences.len()))
                 .collect();
             counts.sort_by(|a, b| b.1.cmp(&a.1));
             counts
@@ -113,8 +132,9 @@ fn main() {
             println!("{:?}: {}", skipgram, count);
         }
     });
+    println!("all flexgrams: {:?}", flexgram_start.elapsed());
 }
 
-fn prune<T: Eq + std::hash::Hash>(line_references: &mut HashMap<T, Vec<&str>>, threshold: usize) {
+fn prune<T: Eq + std::hash::Hash>(line_references: &mut HashMap<T, Vec<usize>>, threshold: usize) {
     line_references.retain(|_, lines| lines.len() >= threshold);
 }
