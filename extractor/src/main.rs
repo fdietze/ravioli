@@ -1,9 +1,6 @@
-mod ngrams;
 use std::cmp;
-use std::iter;
 mod flexgrams;
 use flexgrams::flexgram_pattern;
-use ngrams::ngrams_iter;
 mod corpus;
 use corpus::Corpus;
 use std::collections::HashMap;
@@ -11,7 +8,7 @@ use std::time::Instant;
 
 fn main() {
     let c = Corpus::from_file("../subtitles_de_100k.txt");
-    let threshold = 30;
+    let threshold = 500;
     let max_flexgram_chunks = 2;
 
     println!("extracting ngrams...");
@@ -22,10 +19,10 @@ fn main() {
         println!("size {}...", size);
 
         let ngram_start = Instant::now();
-        for (line_idx, line) in lines.iter().enumerate() {
-            for ngram in ngrams_iter(&line, size) {
-                // println!("{}", ngram);
-                (*ngrams.entry(ngram).or_insert(vec![])).push(line_idx);
+        for (line_idx, (line, line_char_indices)) in lines.iter().enumerate() {
+            for ngram in line_char_indices.windows(size + 1) {
+                let slice = &line[ngram[0]..ngram[ngram.len() - 1]];
+                (*ngrams.entry(slice).or_insert(vec![])).push(line_idx);
             }
         }
 
@@ -39,10 +36,14 @@ fn main() {
             let prev_count = ngrams.len();
             size += 1;
             println!("size {}...", size);
-            for (line_idx, line) in lines.iter().enumerate() {
-                for ngram in ngrams_iter(&line, size) {
-                    if ngrams_iter(&ngram, size - 1).all(|ngram| ngrams.contains_key(ngram)) {
-                        (*ngrams.entry(ngram).or_insert(vec![])).push(line_idx);
+            for (line_idx, (line, line_char_indices)) in lines.iter().enumerate() {
+                for ngram in line_char_indices.windows(size + 1) {
+                    if ngram.windows(size).all(|ngram| {
+                        let slice = &line[ngram[0]..ngram[ngram.len() - 1]];
+                        ngrams.contains_key(slice)
+                    }) {
+                        let slice = &line[ngram[0]..ngram[ngram.len() - 1]];
+                        (*ngrams.entry(slice).or_insert(vec![])).push(line_idx);
                     }
                 }
             }
@@ -71,50 +72,38 @@ fn main() {
     let ngram_max_size = ngrams.len();
     println!("extracting flexgrams...");
 
-    let flexgram_start = Instant::now();
     let mut flexgrams: HashMap<Vec<&str>, Vec<usize>> = HashMap::new();
     c.with_lines(|lines| {
+        let flexgram_start = Instant::now();
         for size in 3..=ngram_max_size {
             println!("size {}...", size);
             let max_chunks = cmp::min((size - 1) / 2 + 1, max_flexgram_chunks);
             for chunks in 2..=max_chunks {
-                println!("  chunks {}...", chunks);
                 let flexgram_start = Instant::now();
+                let prev_count = flexgrams.len();
                 let flexgram_pat = flexgram_pattern(size, chunks, ngram_max_size);
+                println!("  chunks {} (patterns: {})...", chunks, flexgram_pat.len());
                 // println!("patterns: {:?}", flexgram_pat);
-                for (line_idx, line) in lines.iter().enumerate() {
-                    for ngram in ngrams_iter(&line, size) {
-                        //TODO: calculate only once per line, or even never, using bytes and
-                        //utf-8
-                        let indices: Vec<usize> = ngram
-                            .char_indices()
-                            .map(|(i, _)| i)
-                            .chain(iter::once(ngram.len()))
-                            .collect();
+                for (line_idx, (line, line_char_indices)) in lines.iter().enumerate() {
+                    for ngram in line_char_indices.windows(size + 1) {
                         flexgram_pat.iter().for_each(|pattern| {
-                            let flexgram = pattern
+                            let flexgram: Vec<&str> = pattern
                                 .iter()
-                                .map(|(from, to)| &ngram[indices[*from]..indices[*to]])
+                                .map(|(from, to)| &line[ngram[*from]..ngram[*to]])
                                 .collect();
-                            (*flexgrams.entry(flexgram).or_insert(vec![])).push(line_idx);
+                            if flexgram.iter().all(|ngram| ngrams.contains_key(ngram)) {
+                                (*flexgrams.entry(flexgram).or_insert(vec![])).push(line_idx);
+                            }
                         })
-
-                        // for flexgram in flexgrams_iter(ngram, &flexgram_pat) {
-                        //     if flexgram.iter().all(|ngram| ngrams.contains_key(ngram)) {
-                        //         (*flexgrams.entry(flexgram).or_insert(vec![])).push(&line);
-                        //     }
-                        // }
                     }
                 }
-                println!("    total: {}", flexgrams.len());
+                println!("    total: {}", flexgrams.len() - prev_count);
                 prune(&mut flexgrams, threshold);
-                println!("    kept: {}", flexgrams.len());
+                println!("    kept: {}", flexgrams.len() - prev_count);
                 println!("    took: {:?}", flexgram_start.elapsed());
-                if flexgrams.len() == 0 {
-                    break;
-                }
             }
         }
+        println!("all flexgrams took: {:?}", flexgram_start.elapsed());
 
         println!("printing top flexgrams...");
         let top = {
@@ -128,11 +117,10 @@ fn main() {
 
         println!("{}", top.len());
 
-        for (skipgram, count) in top.iter().take(10000) {
-            println!("{:?}: {}", skipgram, count);
+        for (index, (skipgram, count)) in top.iter().enumerate().take(10000) {
+            println!("{} {:?}: {}", index, skipgram, count);
         }
     });
-    println!("all flexgrams: {:?}", flexgram_start.elapsed());
 }
 
 fn prune<T: Eq + std::hash::Hash>(line_references: &mut HashMap<T, Vec<usize>>, threshold: usize) {
