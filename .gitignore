@@ -1,0 +1,7 @@
+/out
+/.local
+/.cache
+/stanza_resources
+/.bash_history
+/.python_history
+/extension-functions.so
