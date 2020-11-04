@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-set -eo pipefail # exit when one command fails
-set -u # stop when using undefined variable
+set -Eeuo pipefail # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/#:~:text=set%20%2Du,is%20often%20highly%20desirable%20behavior.
 
-CORPUS=$1
+SQLITEDB=$1
 
-q() { sqlite3 $CORPUS/$CORPUS.sqlite --noheader "$@"; }
+q() { sqlite3 "$SQLITEDB" --noheader "$@"; }
 
 
 PATTERNSCOREFN='2*(1/p.coverage) + MIN(1/s.coverage)'
@@ -15,7 +14,7 @@ GAP=4
 # TODO: MAXGAP = log(10000)/log($GAP)
 
 # see what will be next
-# cat << EOF | sqlite3 $CORPUS/$CORPUS.sqlite
+# cat << EOF | sqlite3 "$SQLITEDB"
 # .headers on
 # .mode column
 
@@ -42,9 +41,8 @@ GAP=4
 # LIMIT 20;
 # EOF
 
-# exit 0;
 
-sentenceid=$(cat << EOF | sqlite3 $CORPUS/$CORPUS.sqlite
+sentenceid=$(cat << EOF | sqlite3 "$SQLITEDB"
 .headers off
 .mode list
 
@@ -66,6 +64,13 @@ LIMIT 1
 ;
 EOF
 )
+
+# if no more pattern needs to be trained, advance in time
+if [ -z "$sentenceid" ]; then
+    q "UPDATE tick SET time = time + 1"
+    exit 0;
+fi
+
 
 # echo "sentenceid: '$sentenceid'"
 

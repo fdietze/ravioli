@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-set -e # exit when one command fails
+set -Eeuo pipefail # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/#:~:text=set%20%2Du,is%20often%20highly%20desirable%20behavior.
 
 
 # TODO frequency is imported as INF
 
 
-CORPUS=$1
+SQLITEDB=$1
+SENTENCES=$2
+PATTERNS=$3
+REVERSEINDEX=$4
 
 MIN_SENTENCE_OCCURRENCES=5
 
-rm -f $CORPUS/$CORPUS.sqlite
-cat << EOF | sqlite3 $CORPUS/$CORPUS.sqlite
+rm -f "$SQLITEDB"
+cat << EOF | sqlite3 "$SQLITEDB"
 
 .bail on
 PRAGMA foreign_keys = ON;
@@ -19,11 +22,12 @@ PRAGMA foreign_keys = ON;
 SELECT "importing all sentences...";
 CREATE TABLE rawsentences(
   sentenceid INTEGER NOT NULL PRIMARY KEY,
-  sentence TEXT NOT NULL
+  sentence TEXT NOT NULL,
+  tokenized TEXT NOT NULL
 );
 CREATE INDEX rawsentences_sentence_idx ON rawsentences (sentence); -- will be replaced by unique index later
 .mode tabs
-.import $CORPUS/$CORPUS.tsv rawsentences
+.import '$SENTENCES' rawsentences
 
 
 
@@ -31,14 +35,16 @@ CREATE INDEX rawsentences_sentence_idx ON rawsentences (sentence); -- will be re
 SELECT "Store duplicate sentences only once with their occurrence count...";
 CREATE TABLE sentences(
   sentenceid INTEGER NOT NULL PRIMARY KEY,
-  sentence TEXT NOT NULL UNIQUE,
+  sentence TEXT NOT NULL,
+  tokenized TEXT NOT NULL UNIQUE,
   occurrences INTEGER NOT NULL,
   coverage REAL NOT NULL
 );
 CREATE INDEX sentences_occurrences_idx ON sentences (occurrences);
 CREATE INDEX sentences_coverage_idx ON sentences (coverage);
-INSERT INTO sentences (sentenceid, sentence, occurrences, coverage)
-    SELECT min(sentenceid) as sentenceid, sentence, count(sentenceid) as occurrences, CAST(count(sentenceid) as REAL) / (SELECT COUNT(*) FROM rawsentences) as coverage FROM rawsentences group by sentence;
+INSERT INTO sentences (sentenceid, sentence, tokenized, occurrences, coverage)
+    SELECT min(sentenceid) as sentenceid, sentence, tokenized, count(sentenceid) as occurrences, CAST(count(sentenceid) as REAL) / (SELECT COUNT(*) FROM rawsentences) as coverage FROM rawsentences group by tokenized;
+
 DROP TABLE rawsentences;
 
 SELECT "remove uncommon sentences (occurrence < $MIN_SENTENCE_OCCURRENCES)...";
@@ -54,7 +60,7 @@ CREATE TABLE patterns(
   frequency REAL NOT NULL
 );
 .mode tabs
-.import $CORPUS/$CORPUS.patterns.tsv patterns
+.import '$PATTERNS' patterns
 -- insert empty pattern to fulfill reverseindex foreign key constraint
 INSERT INTO "patterns"(rank,pattern,coverage,size,frequency) VALUES(999999999, '', 0.0, 0, 0.0);
 
@@ -83,15 +89,15 @@ EOF
 
 
 # separate session to ignore foreign key errors
-cat << EOF | sqlite3 $CORPUS/$CORPUS.sqlite 2> /dev/null || true
+cat << EOF | sqlite3 "$SQLITEDB" 2> /dev/null || true
 PRAGMA foreign_keys = ON;
 .mode tabs
-.import $CORPUS/$CORPUS.reverse-index.tsv reverseindex
+.import '$REVERSEINDEX' reverseindex
 EOF
 
 
 
-cat << EOF | sqlite3 $CORPUS/$CORPUS.sqlite
+cat << EOF | sqlite3 "$SQLITEDB"
 .bail on
 PRAGMA foreign_keys = ON;
 
@@ -99,8 +105,8 @@ PRAGMA foreign_keys = ON;
 SELECT "remove sentences with unknown patterns (below counted threshold)...";
 DELETE FROM sentences WHERE sentenceid IN (SELECT sentenceid FROM reverseindex WHERE pattern = '');
 DELETE FROM patterns WHERE pattern = '';
--- SELECT sentence, occurrences, (MAX(position)+1)-COUNT(DISTINCT position) as missing, length(sentence)-length(replace(sentence, ' ', ''))+1-COUNT(DISTINCT position) as missing2, GROUP_CONCAT(DISTINCT position) FROM sentences s JOIN reverseindex r ON r.sentenceid = s.sentenceid GROUP BY s.sentenceid HAVING missing2 > 0 order by occurrences limit 100;
-DELETE FROM sentences WHERE sentenceid IN (SELECT s.sentenceid FROM sentences s JOIN reverseindex r ON r.sentenceid = s.sentenceid GROUP BY s.sentenceid HAVING length(sentence)-length(replace(sentence, ' ', ''))+1-COUNT(DISTINCT position) > 0);
+-- SELECT sentence, occurrences, (MAX(position)+1)-COUNT(DISTINCT position) as missing, length(tokenized)-length(replace(tokenized, ' ', ''))+1-COUNT(DISTINCT position) as missing2, GROUP_CONCAT(DISTINCT position) FROM sentences s JOIN reverseindex r ON r.sentenceid = s.sentenceid GROUP BY s.sentenceid HAVING missing2 > 0 order by occurrences limit 100;
+DELETE FROM sentences WHERE sentenceid IN (SELECT s.sentenceid FROM sentences s JOIN reverseindex r ON r.sentenceid = s.sentenceid GROUP BY s.sentenceid HAVING length(tokenized)-length(replace(tokenized, ' ', ''))+1-COUNT(DISTINCT position) > 0);
 
 
 SELECT "remove patterns that don't appear in any sentence...";
@@ -133,7 +139,7 @@ ALTER TABLE patterns ADD COLUMN proficiency INTEGER NOT NULL DEFAULT 2;
 
 
 
-.fullschema
+-- .fullschema
 
 .headers off
 SELECT "vacuum...";
@@ -147,4 +153,4 @@ PRAGMA integrity_check;
 EOF
 
 
-ls -lh $CORPUS/$CORPUS.sqlite
+ls -lh "$SQLITEDB"
