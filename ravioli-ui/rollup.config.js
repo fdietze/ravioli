@@ -5,7 +5,7 @@ import livereload from 'rollup-plugin-livereload';
 import { terser } from 'rollup-plugin-terser';
 import sveltePreprocess from 'svelte-preprocess';
 import typescript from '@rollup/plugin-typescript';
-import nodePolyfills from 'rollup-plugin-node-polyfills';
+import replace from '@rollup/plugin-replace';
 
 const production = !process.env.ROLLUP_WATCH;
 
@@ -47,7 +47,10 @@ export default {
 			css: css => {
 				css.write('bundle.css');
 			},
-			preprocess: sveltePreprocess(),
+			preprocess: sveltePreprocess({
+        sourceMap: !production,
+        postcss: true,
+      }),
 		}),
 
 		// If you have external dependencies installed from
@@ -76,7 +79,11 @@ export default {
 		// If we're building for production (npm run build
 		// instead of npm run dev), minify
 		production && terser(),
-    nodePolyfills({crypto: true})
+    replace({
+      'DEEPL_API_KEY': process.env.DEEPL_API_KEY,
+      // __buildDate__: () => new Date(),
+      // __buildVersion: 15
+    })
 	],
 	watch: {
 		clearScreen: false

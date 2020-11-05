@@ -11,5 +11,5 @@
 </style>
 
 <main>
-    {#each diff as part}<span style={part.added ? "color:red; text-decoration: line-through" : part.removed ? "color: gray;" : "color: green"}>{part.value}</span>{/each}
+    {#each diff as part}<span style={part.added ? "color:red; text-decoration: line-through" : part.removed ? "background-color: bisque;" : "color: green"}>{part.value}</span>{/each}
 </main>
