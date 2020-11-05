@@ -196,7 +196,7 @@
             </div>
             {#each proposedWords as word}
                 <button
-                    on:click={() => (userInput += word)}
+                    on:click={async () => {userInput += word; await tick(); inputField.focus()}}
                     class="ml-1 mt-2 hover:bg-gray-200 py-2 px-4 border rounded focus:outline-none focus:shadow-outline">{word}</button>
             {/each}
             <!--
