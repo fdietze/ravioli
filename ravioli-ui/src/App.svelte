@@ -58,7 +58,7 @@
     );
 
     $: proposedWords = (() => {
-        let words = currentSentence.replace(/([ \,\!])/g, "$1#!#!").split("#!#!");
+        let words = currentSentence.replace(/([ \,\!'\-]+)/g, "$1#!#!").split("#!#!").filter(w => w != '');
         shuffleArray(words);
         return words;
     })();
