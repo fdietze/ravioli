@@ -39,6 +39,7 @@ if [ ! -s "$CORPUS_OUT/sentences.txt" ]; then
     (
     pv "$OUT/${LANG}_subtitles.txt" |
         $CLEANUP_COMMAND |
+        $CLEANUP_COMMAND | # cleanup twice is intentional (only once doesn't capture everything)
         in_docker ./sentences_stanza.py "$LANG" |
         head -"$CORPUS_SENTENCE_LIMIT" |
         cat > "$CORPUS_OUT/sentences.txt"
