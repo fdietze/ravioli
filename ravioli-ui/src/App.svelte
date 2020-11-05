@@ -117,6 +117,7 @@
         });
         let regex = new RegExp(patternParts.join("(\\s*)"));
 
+        // only put spaces in the regex, if they are spaces in the real sentence.
         let matches = currentSentence.match(regex);
 
         const result = patternParts
@@ -125,7 +126,10 @@
                     p + (i == patternParts.length - 1 ? "" : matches[1 + i])
             )
             .join("");
-        return new RegExp(result);
+
+        // don't care about spaces before punctuation: TODO: Hey Mr. Dog.
+        const punctuationAdjustedResult = result.replace(/\s*(\\\?|\\\.|!)$/, '\\s*$1');
+        return new RegExp(punctuationAdjustedResult);
     }
 
     function regExpEscape(string: string): string {
