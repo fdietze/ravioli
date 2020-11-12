@@ -68,7 +68,7 @@ export function setLearnedPattern(db: SqlJs.Database, pattern: string, correct: 
   if (correct) {
     queryWithParams(
       db,
-      `UPDATE patterns SET proficiency = proficiency + 1, next_test = (SELECT time from tick LIMIT 1) + power(${GAP}, max(0, min(8, proficiency))) WHERE pattern = :pattern`,
+      `UPDATE patterns SET proficiency = proficiency + 1, next_test = (SELECT time from tick LIMIT 1) + power(${GAP}, max(0, min(8, proficiency+2))) WHERE pattern = :pattern`,
       {":pattern": pattern}
     );
   } else {

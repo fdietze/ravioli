@@ -3,13 +3,13 @@ set -Eeuo pipefail # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_
 
 SQLITEDB=$1
 
-q() { sqlite3 "$SQLITEDB" --noheader "$@"; }
+q() { sqlite3 "$SQLITEDB" -init "" "$@"; }
 
 
 PATTERNSCOREFN='2*(1/p.coverage) + MIN(1/s.coverage)'
 # PATTERNSCOREFN='(1/p.coverage) + MIN(1/s.coverage)'
 # PATTERNSCOREFN='(1/p.coverage) + sqrt(MIN(1/s.coverage))'
-SENTENCESCOREFN='(1/ss.coverage) + AVG(1/p.coverage*(p.proficiency-1)*(p.proficiency-1))' # default proficiency is 2
+SENTENCESCOREFN='(1/ss.coverage) + AVG(1/p.coverage*(p.proficiency+1)*(p.proficiency+1))' # default proficiency is 0
 GAP=4
 # TODO: MAXGAP = log(10000)/log($GAP)
 
@@ -42,7 +42,7 @@ GAP=4
 # EOF
 
 
-sentenceid=$(cat << EOF | sqlite3 "$SQLITEDB"
+sentenceid=$(cat << EOF | sqlite3 -init "" "$SQLITEDB"
 .headers off
 .mode list
 
@@ -87,7 +87,7 @@ IFS=$'\n'
 patterns=(`q "SELECT p.rank from reverseindex r JOIN patterns p ON r.pattern = p.pattern  WHERE sentenceid = $sentenceid"`)
 
 for rank in "${patterns[@]}"; do
-    q -cmd ".load ./extension-functions" "UPDATE patterns SET proficiency = proficiency + 1, next_test = (SELECT time from tick LIMIT 1) + power($GAP, max(0, min(8, proficiency))) WHERE rank = '$rank';"
+    q -cmd ".load ./extension-functions" "UPDATE patterns SET proficiency = proficiency + 1, next_test = (SELECT time from tick LIMIT 1) + power($GAP, max(0, min(8, proficiency+2))) WHERE rank = '$rank';"
     # q -cmd ".load ./extension-functions" "UPDATE patterns SET proficiency = proficiency - 1, next_test = (SELECT time from tick LIMIT 1) + $GAP WHERE rank = '$rank';"
 done
 
