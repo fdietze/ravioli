@@ -3,145 +3,221 @@
     import { tick } from "svelte";
     import type { SqlJs } from "sql.js/module";
     import { initSQL } from "./db";
-    import { getLanguageModel, saveModel } from "./modelstorage";
+    import { getLanguageModel, getTranslations } from "./modelstorage";
+    import { SvelteSubject } from "./SvelteSubject";
     import {
-        nextTick,
-        nextSentenceId,
+        getNextSentenceId,
         getSentence,
         getSentencePatterns,
-        learnedPattern,
+        saveExcerciseResult,
     } from "./model";
     import SentenceDiff from "./SentenceDiff.svelte";
-    import { translate } from "./translation";
     import Diff from "diff";
+    import {
+        Observable,
+        BehaviorSubject,
+        ReplaySubject,
+        Subject,
+        from,
+        of,
+        combineLatest,
+        zip,
+        concat,
+    } from "rxjs";
+    import {
+        switchMap,
+        withLatestFrom,
+        map,
+        mergeMap,
+        mergeScan,
+        startWith,
+        share,
+    } from "rxjs/operators";
+    import { translateSentenceFromDb } from "./translation";
+    import { modelPatternToRegExp, getProposedWords } from "./model_utils";
 
-    let SQL: SqlJs.SqlJsStatic;
-    let db: SqlJs.Database;
-    let lang = "fr";
+    /* console.log('navigator.language: ', navigator.language); */
 
-    let currentSentence = "";
-    let currentPatterns = [];
-    let translatedSentence = "";
-    let userInput = "";
+    const lang = new ReplaySubject<string>(1);
+    const nativeLang = new ReplaySubject<string>(1);
+    const available_languages: Array<{
+        lang: string;
+        translations: Array<string>;
+    }> = "AVAILABLE_LANGUAGES"; // will be filled at build time
+    const userInput = new SvelteSubject("");
     let showDiff = false;
     let inputField: HTMLInputElement;
 
-    $: matchedPatterns = currentPatterns.map((pattern) => {
-        let regex = patternToRegExp(pattern);
-        let matched = regex.test(userInput);
-        return { pattern: pattern, matched: matched };
+    const pressedEnter = new Subject<void>();
+    const finishCurrentSentence = new Subject<void>();
+
+    const SQL: Observable<SqlJs.SqlJsStatic> = from(initSQL()).pipe(share());
+    const modelDb = combineLatest([SQL, lang]).pipe(
+        switchMap(([SQL, lang]) => {
+            return from(getLanguageModel(SQL, lang)).pipe(
+                map((db) => {
+                    console.log("getLanguageModel:", (db as any).filename);
+                    return db;
+                }),
+                mergeMap((initialDb) =>
+                    concat(
+                        of(initialDb),
+                        finishCurrentSentence.pipe(
+                            withLatestFrom(matchedPatterns),
+                            mergeScan((currentDb, [_, matchedPatterns]) => {
+                                userInput.next("");
+                                showDiff = false;
+                                const nextDb = from(
+                                    saveExcerciseResult(
+                                        SQL,
+                                        currentDb,
+                                        lang,
+                                        matchedPatterns
+                                    )
+                                );
+                                return nextDb;
+                            }, initialDb)
+                        )
+                    )
+                )
+            );
+        }),
+        share()
+    );
+    const translationDb = combineLatest([SQL, lang, nativeLang]).pipe(
+        switchMap(([SQL, lang, nativeLang]) => {
+            return from(getTranslations(SQL, lang, nativeLang)).pipe(
+                map((db) => {
+                    console.log("getTranslations:", (db as any).filename);
+                    return db;
+                })
+            );
+        }),
+        share()
+    );
+
+    SQL.forEach((db) => console.log("SQL: ", db != null));
+    modelDb.forEach((db: any) => console.log("modelDb: ", db.filename));
+    translationDb.forEach((db: any) =>
+        console.log("translationDb: ", db.filename)
+    );
+
+    const currentSentenceId: Observable<string> = modelDb.pipe(
+        map(getNextSentenceId),
+        share()
+    );
+    const currentSentence: Observable<string> = zip(
+        modelDb,
+        currentSentenceId
+    ).pipe(
+        map(([modelDb, sentenceId]) => getSentence(modelDb, sentenceId)),
+        share(),
+        startWith("")
+    );
+    const currentPatterns: Observable<Array<string>> = zip(
+        modelDb,
+        currentSentenceId
+    ).pipe(
+        map(([modelDb, sentenceId]) =>
+            getSentencePatterns(modelDb, sentenceId)
+        ),
+        share(),
+        startWith([])
+    );
+
+    const matchedPatterns: Observable<Array<{
+        pattern: string;
+        matched: boolean;
+    }>> = combineLatest([
+        userInput,
+        zip(currentSentence, currentPatterns),
+    ]).pipe(
+        map(([userInput, [currentSentence, currentPatterns]]) =>
+            currentPatterns.map((pattern) => {
+                const regex = modelPatternToRegExp(pattern, currentSentence);
+                const matched = regex.test(userInput);
+                return { pattern: pattern, matched: matched };
+            })
+        ),
+        share(),
+        startWith([])
+    );
+
+    const allPatternsMatch: Observable<boolean> = matchedPatterns.pipe(
+        map((matchedPatterns) =>
+            matchedPatterns.reduce(
+                (acc, pattern) => acc && pattern.matched,
+                true
+            )
+        ),
+        share(),
+        startWith(false)
+    );
+
+    const currentTranslations: Observable<Array<string>> = combineLatest([
+        translationDb,
+        currentSentenceId,
+    ]).pipe(
+        map(([translationDb, sentenceId]) =>
+            translateSentenceFromDb(translationDb, sentenceId)
+        ),
+        share(),
+        startWith([])
+    );
+
+    currentSentence.forEach((s) => {
+        console.log("currentSentence:", s);
+    });
+    finishCurrentSentence.forEach(() => {
+        console.log("finishCurrentSentence");
     });
 
-    $: patternProgress =
-        matchedPatterns
-            .map((pattern) => (pattern.matched ? 1 : 0))
-            .reduce((acc, val) => acc + val, 0) / matchedPatterns.length;
-
-    $: diffProgress =
-        Diff.diffChars(currentSentence.replace(/\s*/g, ""), userInput)
-            .filter((p) => !p.added && !p.removed)
-            .map((p) => p.value.length)
-            .reduce((acc, val) => acc + val, 0) /
-        currentSentence.replace(/\s*/g, "").length;
-
-    $: errorProgress = Math.min(
-        Diff.diffChars(currentSentence, userInput)
-            .filter((p) => p.added)
-            .map((p) => p.value.length)
-            .reduce((acc, val) => acc + val, 0) / currentSentence.length,
-        1.0
-    );
-
-    $: allPatternsMatch = matchedPatterns.reduce(
-        (acc, pattern) => acc && pattern.matched,
-        true
-    );
-
-    $: proposedWords = (() => {
-        let words = currentSentence.replace(/([ \,\!'\-]+)/g, "$1#!#!").split("#!#!").filter(w => w != '');
-        shuffleArray(words);
-        return words;
-    })();
-
-    $: (async () => {
-        translatedSentence = await translate(currentSentence, lang, "de");
-    })();
-
-    function shuffleArray(array) {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-        }
-    }
-
-    async function init() {
-        SQL = await initSQL();
-        db = await getLanguageModel(SQL, lang);
-        showNextSentence();
-    }
-
-    async function showNextSentence() {
-        let sentenceId = nextSentenceId(db);
-        console.log("Next SentenceId:", sentenceId);
-        userInput = "";
-        translatedSentence = "";
-        currentSentence = getSentence(db, sentenceId);
-        currentPatterns = getSentencePatterns(db, sentenceId);
-        showDiff = false;
-        await tick();
-        inputField.focus();
-    }
-
-    async function finishCurrentSentence() {
-        for (var matchedPattern of matchedPatterns) {
-            learnedPattern(db, matchedPattern.pattern, matchedPattern.matched);
-        }
-        nextTick(db);
-        db = await saveModel(SQL, db, lang);
-        await showNextSentence();
-    }
-
-    async function checkAnswer() {
-        if (allPatternsMatch) {
-            finishCurrentSentence();
-        } else {
-            showDiff = true;
-        }
-    }
-
-    function patternToRegExp(pattern: string): RegExp {
-        let wildCardRegExp = new RegExp(/\{\*+\}/);
-        let patternParts = pattern.split(" ").map((p) => {
-            let isWildCard = wildCardRegExp.test(p);
-            return isWildCard ? ".*" : regExpEscape(p);
+    pressedEnter
+        .pipe(withLatestFrom(allPatternsMatch))
+        .forEach(([_, allPatternsMatch]) => {
+            console.log("--------------------------");
+            if (showDiff) finishCurrentSentence.next();
+            else {
+                if (allPatternsMatch) {
+                    finishCurrentSentence.next();
+                } else {
+                    showDiff = true;
+                }
+            }
         });
-        let regex = new RegExp(patternParts.join("(\\s*)"));
 
-        // only put spaces in the regex, if they are spaces in the real sentence.
-        let matches = currentSentence.match(regex);
+    currentSentence.forEach(async (_) => {
+        await tick();
+        inputField?.focus();
+    });
 
-        const result = patternParts
-            .map(
-                (p, i) =>
-                    p + (i == patternParts.length - 1 ? "" : matches[1 + i])
+    const diffProgress = combineLatest([userInput, currentSentence]).pipe(
+        map(
+            ([userInput, currentSentence]) =>
+                Diff.diffChars(currentSentence.replace(/\s*/g, ""), userInput)
+                    .filter((p) => !p.added && !p.removed)
+                    .map((p) => p.value.length)
+                    .reduce((acc, val) => acc + val, 0) /
+                currentSentence.replace(/\s*/g, "").length
+        )
+    );
+    const errorProgress = combineLatest([userInput, currentSentence]).pipe(
+        map(([userInput, currentSentence]) =>
+            Math.min(
+                Diff.diffChars(currentSentence, userInput)
+                    .filter((p) => p.added)
+                    .map((p) => p.value.length)
+                    .reduce((acc, val) => acc + val, 0) /
+                    currentSentence.length,
+                1.0
             )
-            .join("");
+        )
+    );
 
-        // don't care about spaces before punctuation: TODO: Hey Mr. Dog.
-        const punctuationAdjustedResult = result.replace(/\s*(\\\?|\\\.|!)$/, '\\s*$1');
-        return new RegExp(punctuationAdjustedResult);
-    }
-
-    function regExpEscape(string: string): string {
-        return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
-    }
-
-    function pressedEnter() {
-        if (showDiff) finishCurrentSentence();
-        else checkAnswer();
-    }
-
-    init();
+    const proposedWords = currentSentence.pipe(
+        map(getProposedWords),
+        startWith([])
+    );
 </script>
 
 <style type="text/scss">
@@ -151,61 +227,88 @@
 
 <svelte:window
     on:keyup={(e) => {
-        if (e.key === 'Enter') pressedEnter();
+        if (e.key === 'Enter') pressedEnter.next();
     }} />
 <main>
     <div class="h-screen flex justify-center">
         <div class="p-10">
-            <div class="text-2xl">{translatedSentence}</div>
-            {#if showDiff}
-                {#if userInput != ''}
-                    <div>{currentSentence}</div>
-                {/if}
-                <div>
-                    <SentenceDiff original={currentSentence} {userInput} />
-                </div>
-                <button
-                    on:click={finishCurrentSentence}
-                    class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Next</button>
-            {:else}
-                <div class="flex">
-                    <input
-                        bind:value={userInput}
-                        bind:this={inputField}
-                        type="text"
-                        class="border rounded w-full py-2 px-3 leading-tight outline-none focus:shadow-outline"
-                        placeholder="Type {lang} translation" />
+            {#if $lang === undefined}
+                <h1>Which language do you want to learn?</h1>
+                {#each available_languages as l}
                     <button
-                        on:click={checkAnswer}
-                        class="ml-1 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Check</button>
-                </div>
-            {/if}
-            <div
-                class="mt-2 h-3 relative max-w-xl rounded-full overflow-hidden">
-                <div class="w-full h-full bg-gray-200 absolute" />
-                <div
-                    class="h-full bg-green-500 absolute"
-                    style="width:{diffProgress * 100}%" />
-            </div>
-            <div
-                class="mt-2 h-3 relative max-w-xl rounded-full overflow-hidden">
-                <div class="w-full h-full bg-gray-200 absolute" />
-                <div
-                    class="h-full bg-red-500 absolute"
-                    style="width:{errorProgress * 100}%" />
-            </div>
-            {#each proposedWords as word}
-                <button
-                    on:click={async () => {userInput += word; await tick(); inputField.focus()}}
-                    class="ml-1 mt-2 hover:bg-gray-200 py-2 px-4 border rounded focus:outline-none focus:shadow-outline">{word}</button>
-            {/each}
-            <!--
+                        on:click={() => lang.next(l.lang)}
+                        class="bg-indigo-500 text-white font-bold rounded py-2 px-4 mr-1">{l.lang}</button>
+                {/each}
+            {:else if $nativeLang === undefined}
+                <div>Selected: <b>{$lang}</b></div>
+                <h1>What is your native language?</h1>
+                {#each available_languages.find((l) => l.lang == $lang).translations as t}
+                    <button
+                        on:click={() => nativeLang.next(t)}
+                        class="bg-green-500 text-white font-bold rounded py-2 px-4 mr-1">{t}</button>
+                {/each}
+            {:else}
+                {#each $currentTranslations as sentence}
+                    <div class="text-2xl">{sentence}</div>
+                {/each}
+                {#if showDiff}
+                    {#if $userInput != ''}
+                        <div>{$currentSentence}</div>
+                    {/if}
+                    <div>
+                        <SentenceDiff
+                            original={$currentSentence}
+                            userInput={$userInput} />
+                    </div>
+                    <button
+                        on:click={() => pressedEnter.next()}
+                        class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Next</button>
+                {:else}
+                    <div class="flex">
+                        <input
+                            bind:value={$userInput}
+                            bind:this={inputField}
+                            type="text"
+                            class="border rounded w-full py-2 px-3 leading-tight outline-none focus:shadow-outline"
+                            placeholder="Type {$lang} translation" />
+                        <button
+                            on:click={() => pressedEnter.next()}
+                            class="ml-1 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Check</button>
+                    </div>
+                {/if}
+                {#if !showDiff}
+                    <div
+                        class="mt-2 h-3 relative max-w-xl rounded-full overflow-hidden">
+                        <div class="w-full h-full bg-gray-200 absolute" />
+                        <div
+                            class="h-full bg-green-500 absolute"
+                            style="width:{$diffProgress * 100}%" />
+                    </div>
+                    <div
+                        class="mt-2 h-3 relative max-w-xl rounded-full overflow-hidden">
+                        <div class="w-full h-full bg-gray-200 absolute" />
+                        <div
+                            class="h-full bg-red-500 absolute"
+                            style="width:{$errorProgress * 100}%" />
+                    </div>
+                    {#each $proposedWords as word}
+                        <button
+                            on:click={async () => {
+                                userInput.next(userInput.getValue() + word);
+                                await tick();
+                                inputField?.focus();
+                            }}
+                            class="mr-1 mt-2 hover:bg-gray-200 py-2 px-4 border rounded focus:outline-none focus:shadow-outline text-white hover:text-black">{word}</button>
+                    {/each}
+                {/if}
+                <!--
             {#each matchedPatterns as pattern}
                 <div style={pattern.matched ? 'color: green' : ''}>
                     {pattern.pattern}
                 </div>
             {/each}
             //-->
+            {/if}
         </div>
     </div>
 </main>

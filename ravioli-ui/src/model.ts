@@ -1,23 +1,27 @@
 import {queryWithParams} from './db';
 import type {SqlJs} from 'sql.js/module';
+import {saveModel} from "./modelstorage";
 
 
 export function getSentence(db: SqlJs.Database, sentenceId: string): string {
-  let res = db.exec(`SELECT sentence FROM sentences where sentenceid = ${sentenceId}`);
+  console.log(`getSentence(${sentenceId})`);
+  const res = db.exec(`SELECT sentence FROM sentences where sentenceid = ${sentenceId}`);
   return res[0].values[0][0].toString();
 }
 
 export function getSentencePatterns(db: SqlJs.Database, sentenceId: string): Array<string> {
-  let res = db.exec(
+  console.log(`getSentencePatterns(${sentenceId})`);
+  const res = db.exec(
     `SELECT p.pattern from reverseindex r JOIN patterns p ON r.pattern = p.pattern  WHERE sentenceid = ${sentenceId}`
   );
   return res[0].values.map((val) => val[0].toString());
 }
 
-export function nextSentenceId(db: SqlJs.Database): string {
-  let PATTERNSCOREFN = "2*(1/p.coverage) + MIN(1/s.coverage)";
-  let SENTENCESCOREFN = "(1/ss.coverage) + AVG(1/p.coverage*(p.proficiency-1)*(p.proficiency-1))"; // default proficiency is 2
-  let query = `
+export function getNextSentenceId(db: SqlJs.Database): string {
+  console.log(`getNextSentenceId()`);
+  const PATTERNSCOREFN = "2*(1/p.coverage) + MIN(1/s.coverage)";
+  const SENTENCESCOREFN = "(1/ss.coverage) + AVG(1/p.coverage*(p.proficiency-1)*(p.proficiency-1))"; // default proficiency is 2
+  const query = `
         WITH
             next_patterns as (SELECT p.pattern FROM patterns p JOIN reverseindex r ON r.pattern = p.pattern JOIN sentences s ON s.sentenceid = r.sentenceid WHERE next_test <= (SELECT time FROM tick LIMIT 1) GROUP BY p.rank ORDER BY ${PATTERNSCOREFN} LIMIT 1),
             potential_sentences as ( SELECT sentenceid FROM reverseindex WHERE pattern IN next_patterns)
@@ -36,12 +40,31 @@ export function nextSentenceId(db: SqlJs.Database): string {
   return db.exec(query)[0].values[0][0].toString();
 }
 
-export function nextTick(db: SqlJs.Database) {
+export function setNextTick(db: SqlJs.Database) {
   db.run(`UPDATE tick SET time = time + 1`);
 }
 
-export function learnedPattern(db: SqlJs.Database, pattern: string, correct: boolean) {
-  let GAP = 4;
+
+export async function saveExcerciseResult(
+  SQL: SqlJs.SqlJsStatic,
+  modelDb: SqlJs.Database,
+  lang: string,
+  matchedPatterns: Array<{pattern: string; matched: boolean}>
+): Promise<SqlJs.Database> {
+  for (const matchedPattern of matchedPatterns) {
+    setLearnedPattern(
+      modelDb,
+      matchedPattern.pattern,
+      matchedPattern.matched
+    );
+  }
+  setNextTick(modelDb);
+  return await saveModel(SQL, modelDb, lang);
+}
+
+
+export function setLearnedPattern(db: SqlJs.Database, pattern: string, correct: boolean) {
+  const GAP = 4;
   if (correct) {
     queryWithParams(
       db,

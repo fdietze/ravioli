@@ -10,10 +10,10 @@ SENTENCES=$2
 PATTERNS=$3
 REVERSEINDEX=$4
 
-MIN_SENTENCE_OCCURRENCES=3
+MIN_SENTENCE_OCCURRENCES=4
 
 rm -f "$SQLITEDB"
-cat << EOF | sqlite3 "$SQLITEDB"
+cat << EOF | sqlite3 -init "" "$SQLITEDB"
 
 .bail on
 PRAGMA foreign_keys = ON;
@@ -89,7 +89,7 @@ EOF
 
 
 # separate session to ignore foreign key errors
-cat << EOF | sqlite3 "$SQLITEDB" 2> /dev/null || true
+cat << EOF | sqlite3 -init "" "$SQLITEDB" 2> /dev/null || true
 PRAGMA foreign_keys = ON;
 .mode tabs
 .import '$REVERSEINDEX' reverseindex
@@ -97,7 +97,7 @@ EOF
 
 
 
-cat << EOF | sqlite3 "$SQLITEDB"
+cat << EOF | sqlite3 -init "" "$SQLITEDB"
 .bail on
 PRAGMA foreign_keys = ON;
 

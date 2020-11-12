@@ -1,5 +1,14 @@
 import {setCORS} from "google-translate-api-browser";
+import type {SqlJs} from "sql.js/module";
 const translateGoogleAPI = setCORS("http://cors-anywhere.herokuapp.com/");
+
+
+export function translateSentenceFromDb(db: SqlJs.Database, sentenceId:string):Array<string> {
+  console.log(`translateSentenceFromDb(${sentenceId})`);
+  const res = db.exec(`SELECT sentence FROM translations t WHERE t.sentenceid = ${sentenceId} ORDER BY level LIMIT 3`);
+  if(res.length == 0) return [];
+  return res[0].values.map(a => a[0].toString());
+}
 
 export const translate = translateGoogle;
 
