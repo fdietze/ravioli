@@ -1,5 +1,6 @@
 <script type="text/typescript">
     import Tailwindcss from "./Tailwind.svelte";
+    import PatternOverview from "./PatternOverview.svelte";
     import { tick } from "svelte";
     import type { SqlJs } from "sql.js/module";
     import { initSQL } from "./db";
@@ -10,6 +11,7 @@
         getSentence,
         getSentencePatterns,
         saveExcerciseResult,
+        getPatternOverview,
     } from "./model";
     import SentenceDiff from "./SentenceDiff.svelte";
     import Diff from "diff";
@@ -165,6 +167,12 @@
         startWith([])
     );
 
+    const patternOverview: Observable<Array<{
+        pattern: string;
+        rank: number;
+        proficiency: number;
+    }>> = modelDb.pipe(map(getPatternOverview), share(), startWith([]));
+
     currentSentence.forEach((s) => {
         console.log("currentSentence:", s);
     });
@@ -231,7 +239,8 @@
     }} />
 <main>
     <div class="h-screen flex justify-center">
-        <div class="p-10">
+        <div class="p-10 flex" style="width: 600px; min-width: 300px;">
+            <div class="w-full">
             {#if $lang === undefined}
                 <h1>Which language do you want to learn?</h1>
                 {#each available_languages as l}
@@ -301,6 +310,7 @@
                             class="mr-1 mt-2 hover:bg-gray-200 py-2 px-4 border rounded focus:outline-none focus:shadow-outline text-white hover:text-black">{word}</button>
                     {/each}
                 {/if}
+
                 <!--
             {#each matchedPatterns as pattern}
                 <div style={pattern.matched ? 'color: green' : ''}>
@@ -309,6 +319,8 @@
             {/each}
             //-->
             {/if}
+                </div>
+            <PatternOverview data={$patternOverview} />
         </div>
     </div>
 </main>

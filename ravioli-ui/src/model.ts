@@ -79,3 +79,12 @@ export function setLearnedPattern(db: SqlJs.Database, pattern: string, correct: 
     );
   }
 }
+
+export function getPatternOverview(db: SqlJs.Database): Array<{pattern:string, rank:number, proficiency:number}> {
+  const res = db.exec(
+    `select rank, pattern, proficiency from patterns where rank <= (select max(rank) from patterns where proficiency > 0)`
+  );
+
+  if(res.length == 0) return [];
+  return res[0].values.map((val) => { return {rank: val[0] as number, pattern: val[1] as string, proficiency: val[2] as number} });
+}
