@@ -6,4 +6,4 @@ SQLITEDB=$1
 q() { sqlite3 "$SQLITEDB" --noheader "$@"; }
 
 q "UPDATE tick SET time = 0"
-q "UPDATE patterns SET proficiency = 2, next_test = 0;"
+q "UPDATE patterns SET proficiency = 0, next_test = 0;"
