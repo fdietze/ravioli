@@ -202,11 +202,11 @@
     const diffProgress = combineLatest([userInput, currentSentence]).pipe(
         map(
             ([userInput, currentSentence]) =>
-                Diff.diffChars(currentSentence.replace(/\s*/g, ""), userInput)
+                Diff.diffChars(currentSentence, userInput)
                     .filter((p) => !p.added && !p.removed)
                     .map((p) => p.value.length)
                     .reduce((acc, val) => acc + val, 0) /
-                currentSentence.replace(/\s*/g, "").length
+                currentSentence.length
         )
     );
     const errorProgress = combineLatest([userInput, currentSentence]).pipe(
