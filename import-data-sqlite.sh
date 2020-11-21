@@ -17,6 +17,8 @@ cat << EOF | sqlite3 -init "" "$SQLITEDB"
 
 .bail on
 PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = MEMORY;
+PRAGMA synchronous = OFF;
 
 
 SELECT "importing all sentences...";
@@ -25,14 +27,14 @@ CREATE TABLE rawsentences(
   sentence TEXT NOT NULL,
   tokenized TEXT NOT NULL
 );
-CREATE INDEX rawsentences_sentence_idx ON rawsentences (sentence); -- will be replaced by unique index later
 .mode tabs
 .import '$SENTENCES' rawsentences
+CREATE INDEX rawsentences_sentence_idx ON rawsentences (sentence); -- will be replaced by unique index later
 
 
 
 
-SELECT "Store duplicate sentences only once with their occurrence count...";
+SELECT "storing duplicate sentences only once with their occurrence count...";
 CREATE TABLE sentences(
   sentenceid INTEGER NOT NULL PRIMARY KEY,
   sentence TEXT NOT NULL,
@@ -47,7 +49,7 @@ INSERT INTO sentences (sentenceid, sentence, tokenized, occurrences, coverage)
 
 DROP TABLE rawsentences;
 
-SELECT "remove uncommon sentences (occurrence < $MIN_SENTENCE_OCCURRENCES)...";
+SELECT "removing uncommon sentences (occurrence < $MIN_SENTENCE_OCCURRENCES)...";
 delete FROM sentences WHERE occurrences < $MIN_SENTENCE_OCCURRENCES;
 
 
@@ -81,9 +83,6 @@ CREATE TABLE reverseindex(
         ON UPDATE CASCADE
         ON DELETE CASCADE
 );
-CREATE INDEX reverseindex_sentenceid_idx ON reverseindex (sentenceid);
-CREATE INDEX reverseindex_position_idx ON reverseindex (position);
-CREATE INDEX reverseindex_pattern_idx ON reverseindex (pattern);
 EOF
 
 
@@ -91,8 +90,14 @@ EOF
 # separate session to ignore foreign key errors
 cat << EOF | sqlite3 -init "" "$SQLITEDB" 2> /dev/null || true
 PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = MEMORY;
+PRAGMA synchronous = OFF;
 .mode tabs
 .import '$REVERSEINDEX' reverseindex
+
+CREATE INDEX reverseindex_sentenceid_idx ON reverseindex (sentenceid);
+CREATE INDEX reverseindex_position_idx ON reverseindex (position);
+CREATE INDEX reverseindex_pattern_idx ON reverseindex (pattern);
 EOF
 
 
@@ -100,16 +105,18 @@ EOF
 cat << EOF | sqlite3 -init "" "$SQLITEDB"
 .bail on
 PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = MEMORY;
+PRAGMA synchronous = OFF;
 
 
-SELECT "remove sentences with unknown patterns (below counted threshold)...";
+SELECT "removing sentences with unknown patterns (below counted threshold)...";
 DELETE FROM sentences WHERE sentenceid IN (SELECT sentenceid FROM reverseindex WHERE pattern = '');
 DELETE FROM patterns WHERE pattern = '';
 -- SELECT sentence, occurrences, (MAX(position)+1)-COUNT(DISTINCT position) as missing, length(tokenized)-length(replace(tokenized, ' ', ''))+1-COUNT(DISTINCT position) as missing2, GROUP_CONCAT(DISTINCT position) FROM sentences s JOIN reverseindex r ON r.sentenceid = s.sentenceid GROUP BY s.sentenceid HAVING missing2 > 0 order by occurrences limit 100;
 DELETE FROM sentences WHERE sentenceid IN (SELECT s.sentenceid FROM sentences s JOIN reverseindex r ON r.sentenceid = s.sentenceid GROUP BY s.sentenceid HAVING length(tokenized)-length(replace(tokenized, ' ', ''))+1-COUNT(DISTINCT position) > 0);
 
 
-SELECT "remove patterns that don't appear in any sentence...";
+SELECT "removing patterns that don't appear in any sentence...";
 -- SELECT p.rank,p.pattern,count(r.sentenceid) sentence_count FROM patterns p left outer JOIN reverseindex r on r.pattern = p.pattern group by p.rank HAVING sentence_count = 0 order by p.rank;
 delete FROM patterns WHERE rank IN (SELECT p.rank FROM patterns p left outer JOIN reverseindex r on r.pattern = p.pattern group by p.rank HAVING count(r.sentenceid) = 0);
 

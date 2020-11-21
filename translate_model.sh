@@ -56,24 +56,43 @@ attach '$MODELFILE' as m;
 
 SELECT "  direct translations from tatoeba...";
 INSERT OR IGNORE INTO translations (sentenceid, sentence, level)
-select s.sentenceid, trs2.sentence, 1
-FROM m.sentences s
-JOIN tr.sentences trs ON s.sentence = trs.sentence AND trs.lang='$LANG'
-JOIN tr.links l ON l.sentenceid = trs.sentenceid
-JOIN tr.sentences trs2 ON trs2.sentenceid = l.translationid AND trs2.lang = '$TRANSLANG'
-GROUP BY s.sentenceid, trs2.sentence;
-select '    ' || count(*) from translations WHERE level = 1;
+    select s.sentenceid, trs2.sentence, 1
+    FROM m.sentences s
+    JOIN tr.sentences trs ON s.sentence = trs.sentence AND trs.lang='$LANG'
+    JOIN tr.links l ON l.sentenceid = trs.sentenceid
+    JOIN tr.sentences trs2 ON trs2.sentenceid = l.translationid AND trs2.lang = '$TRANSLANG'
+    GROUP BY s.sentenceid, trs2.sentence;
+select '    total: ' || count(*) from translations;
+
+
+
 
 SELECT "  indirect translations from tatoeba...";
+-- "A  -- X  -- O  -- X  -- A"
+-- "s1 -- s2 -- s3 -- s4 -- s5"
+-- "s1  -l1->  s2  -l2->  s3  -l3->  s4  -l4->  s5"
 INSERT OR IGNORE INTO translations (sentenceid, sentence, level)
-select s.sentenceid, trs2.sentence, 3 
-FROM m.sentences s
-JOIN tr.sentences trs ON s.sentence = trs.sentence AND trs.lang='$LANG'
-JOIN tr.links l ON l.sentenceid = trs.sentenceid
-JOIN tr.links l2 ON l2.sentenceid = l.translationid
-JOIN tr.sentences trs2 ON trs2.sentenceid = l2.translationid AND trs2.lang = '$TRANSLANG'
-GROUP BY s.sentenceid, trs2.sentence;
-SELECT '    ' || count(*) from translations WHERE level = 3;
+    SELECT sentenceid, translation as sentence, (CASE WHEN COUNT(*) > 100 THEN 1 ELSE 2 END) as level FROM (
+        SELECT s.sentenceid, s3.sentence as translation
+        FROM m.sentences s
+        JOIN tr.sentences s1 ON s.sentence = s1.sentence
+        JOIN tr.links l1 ON l1.sentenceid = s1.sentenceid
+        JOIN tr.links l2 ON l2.sentenceid = l1.translationid
+        JOIN tr.sentences s3 ON s3.sentenceid = l2.translationid
+        JOIN tr.links l3 ON l3.sentenceid = l2.translationid
+        JOIN tr.links l4 ON l4.sentenceid = l3.translationid
+        WHERE
+                s1.lang = '$LANG'
+            AND s3.lang = '$TRANSLANG'
+            AND l4.translationid = s1.sentenceid -- close cycle
+
+            AND s1.sentenceid != l1.translationid
+            AND l1.translationid != l2.translationid
+            AND l2.translationid != l3.translationid
+    )
+    GROUP BY translation
+    HAVING COUNT(*) > 10;
+select '    total: ' || count(*) from translations;
 EOF
 
 
@@ -91,7 +110,7 @@ WITH missing AS (
     LEFT OUTER JOIN translations t on s.sentenceid = t.sentenceid
     WHERE t.sentenceid IS NULL
     )
-SELECT s.sentenceid, t.translation, 2
+SELECT s.sentenceid, t.translation, 3
 FROM missing s
 JOIN cache.translations t ON t.text = s.sentence
 WHERE t.sourcelang = '$LANG' AND t.targetlang = '$TRANSLANG'
@@ -104,7 +123,7 @@ missing_translations "$MODELFILE" "$TRANSLATIONFILE" | sponge | while read -r SE
     if [ -n "$TRANSLATED" ]; then
         echo "    $SENTENCE -> '$TRANSLATED'"
         TRANSLATED_ESCAPED=$(echo "$TRANSLATED" | sed "s/'/''/g" | ./normalize_unicode.sh)
-        sqlite3 -init "" "$TRANSLATIONFILE" "INSERT OR IGNORE INTO translations (sentenceid, sentence, level) VALUES ($SENTENCEID, '$TRANSLATED_ESCAPED', 2)"
+        sqlite3 -init "" "$TRANSLATIONFILE" "INSERT OR IGNORE INTO translations (sentenceid, sentence, level) VALUES ($SENTENCEID, '$TRANSLATED_ESCAPED', 3)"
     else
         break # probably rate limiting issues
     fi
