@@ -9,37 +9,45 @@ q() { sqlite3 "$SQLITEDB" -init "" "$@"; }
 PATTERNSCOREFN='2*(1/p.coverage) + MIN(1/s.coverage)'
 # PATTERNSCOREFN='(1/p.coverage) + MIN(1/s.coverage)'
 # PATTERNSCOREFN='(1/p.coverage) + sqrt(MIN(1/s.coverage))'
-SENTENCESCOREFN='(1/ss.coverage) + AVG(1/p.coverage*(p.proficiency+1)*(p.proficiency+1))' # default proficiency is 0
+SENTENCESCOREFN='((1/ss.coverage) + AVG(1/p.coverage*(p.proficiency+1)*(p.proficiency+1)))/(s.matched_patterns*s.matched_patterns*s.matched_patterns)' # default proficiency is 0
+POTENTIAL_SENTENCE_LIMIT=2000;
+PATTERN_LIMIT=50;
+
 GAP=4
 # TODO: MAXGAP = log(10000)/log($GAP)
 
+
+SELECT_NEXT_PATTERNS="SELECT p.pattern FROM patterns p JOIN reverseindex r ON r.pattern = p.pattern JOIN sentences s ON s.sentenceid = r.sentenceid WHERE next_test <= (SELECT time FROM tick LIMIT 1) GROUP BY p.rank ORDER BY ${PATTERNSCOREFN} LIMIT ${PATTERN_LIMIT}"
+SELECT_POTENTIAL_SENTENCES="SELECT r.sentenceid, COUNT(DISTINCT p.pattern) as matched_patterns FROM reverseindex r JOIN sentences s ON s.sentenceid = r.sentenceid JOIN patterns p ON r.pattern = p.pattern WHERE p.pattern IN next_patterns GROUP BY r.sentenceid ORDER BY matched_patterns DESC, s.coverage DESC LIMIT ${POTENTIAL_SENTENCE_LIMIT}"
+
 # see what will be next
-# cat << EOF | sqlite3 "$SQLITEDB"
-# .headers on
-# .mode column
+cat << EOF | sqlite3 "$SQLITEDB"
+.headers on
+.mode column
 
-# .load ./extension-functions
+.load ./extension-functions
 
-# SELECT p.rank, p.pattern, $PATTERNSCOREFN as score, next_test - (SELECT time FROM tick LIMIT 1) as due, proficiency FROM patterns p JOIN reverseindex r ON r.pattern = p.pattern JOIN sentences s ON s.sentenceid = r.sentenceid WHERE next_test <= (SELECT time FROM tick LIMIT 1) GROUP BY p.rank ORDER BY score LIMIT 10;
+WITH next_patterns as ($SELECT_NEXT_PATTERNS)
+SELECT p.rank, p.pattern, $PATTERNSCOREFN as score, next_test - (SELECT time FROM tick LIMIT 1) as due_in, proficiency FROM patterns p JOIN reverseindex r ON r.pattern = p.pattern JOIN sentences s ON s.sentenceid = r.sentenceid WHERE p.pattern IN next_patterns GROUP BY p.rank ORDER BY score;
 
-# ;
+-- WITH
+--     next_patterns as ($SELECT_NEXT_PATTERNS)
+-- SELECT r.sentenceid, s.sentence, COUNT(DISTINCT p.pattern) FROM reverseindex r JOIN sentences s ON s.sentenceid = r.sentenceid JOIN patterns p ON r.pattern = p.pattern WHERE p.pattern IN next_patterns GROUP BY r.sentenceid ORDER BY COUNT(DISTINCT p.pattern) DESC, s.coverage DESC LIMIT ${POTENTIAL_SENTENCE_LIMIT}
+-- ;
 
-# -- SELECT rank, pattern, proficiency, next_test FROM patterns WHERE next_test <= (SELECT time FROM tick LIMIT 1) ORDER BY rank ASC limit 3;
-
-
-# WITH
-#     next_patterns as (SELECT p.pattern FROM patterns p JOIN reverseindex r ON r.pattern = p.pattern JOIN sentences s ON s.sentenceid = r.sentenceid WHERE next_test <= (SELECT time FROM tick LIMIT 1) GROUP BY p.rank ORDER BY $PATTERNSCOREFN LIMIT 1),
-#     potential_sentences as ( SELECT sentenceid FROM reverseindex WHERE pattern IN next_patterns)
-# SELECT s.sentenceid, ss.sentence, group_concat(p.pattern || '['|| p.rank ||']' || ': ' || p.proficiency, ', ') as patterns, cast(1/ss.coverage as INTEGER) as '1/cov',
-#         $SENTENCESCOREFN as score
-# FROM potential_sentences as s
-# JOIN reverseindex as r ON s.sentenceid = r.sentenceid
-# JOIN sentences ss on ss.sentenceid = s.sentenceid
-# LEFT OUTER JOIN patterns as p ON r.pattern = p.pattern 
-# GROUP BY r.sentenceid 
-# ORDER BY score ASC 
-# LIMIT 20;
-# EOF
+WITH
+    next_patterns as ($SELECT_NEXT_PATTERNS),
+    potential_sentences as ($SELECT_POTENTIAL_SENTENCES)
+SELECT s.sentenceid, s.matched_patterns, ss.sentence, group_concat(p.pattern || '['|| p.rank ||']' || ': ' || p.proficiency, ', ') as patterns, cast(1/ss.coverage as INTEGER) as '1/cov',
+        $SENTENCESCOREFN as score
+FROM potential_sentences as s
+JOIN reverseindex as r ON s.sentenceid = r.sentenceid
+JOIN sentences ss on ss.sentenceid = s.sentenceid
+LEFT OUTER JOIN patterns as p ON r.pattern = p.pattern 
+GROUP BY r.sentenceid 
+ORDER BY score ASC 
+LIMIT 20;
+EOF
 
 
 sentenceid=$(cat << EOF | sqlite3 -init "" "$SQLITEDB"
@@ -49,8 +57,8 @@ sentenceid=$(cat << EOF | sqlite3 -init "" "$SQLITEDB"
 .load ./extension-functions
 
 WITH
-    next_patterns as (SELECT p.pattern FROM patterns p JOIN reverseindex r ON r.pattern = p.pattern JOIN sentences s ON s.sentenceid = r.sentenceid WHERE next_test <= (SELECT time FROM tick LIMIT 1) GROUP BY p.rank ORDER BY $PATTERNSCOREFN LIMIT 1),
-    potential_sentences as ( SELECT sentenceid FROM reverseindex WHERE pattern IN next_patterns)
+    next_patterns as (${SELECT_NEXT_PATTERNS}),
+    potential_sentences as (${SELECT_POTENTIAL_SENTENCES})
 SELECT
     s.sentenceid
 FROM
