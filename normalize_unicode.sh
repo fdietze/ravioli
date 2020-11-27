@@ -16,6 +16,6 @@ alias nfc="perl -MUnicode::Normalize -CS -ne 'print NFC(\$_)'" # composed charac
 alias normalize_spaces="perl -CSDA -plE 's/[^\\S\\t]/ /g'"
 
 # https://unix.stackexchange.com/questions/6516/filtering-invalid-utf8
-alias strip_invalid_lines="grep -ax '.*'"
+alias strip_invalid_lines="rg -ax '.*'"
 
 cat - | strip_invalid_lines | normalize_spaces | nfc

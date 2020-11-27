@@ -29,17 +29,25 @@ fi
 
 
 if [ ! -s "$CORPUS_OUT/sentences.txt" ]; then
-    echo "Normalizing unicode, cleaning up, extracting sentences...."
+    echo "Normalizing unicode, cleaning up, extracting sentences..."
     CLEANUP_COMMAND="./cleanup_default.sh"
     if [ -f "cleanup_$LANG.sh" ]; then
         CLEANUP_COMMAND="./cleanup_$LANG.sh"
     fi
+    PRUNE_COMMAND="./prune_default.sh"
+    if [ -f "prune_$LANG.sh" ]; then
+        PRUNE_COMMAND="./prune_$LANG.sh"
+    fi
     (
-    pv "$OUT/${LANG}.txt" |
+    cat "$OUT/${LANG}.txt" |
         ./normalize_unicode.sh |
+        $PRUNE_COMMAND |
         $CLEANUP_COMMAND |
+        $PRUNE_COMMAND |
         $CLEANUP_COMMAND | # cleanup twice is intentional (only once doesn't capture everything)
+        $PRUNE_COMMAND |
         # ./sentences_stanza.py "$LANG2" |
+        pv --line-mode -s "$CORPUS_SENTENCE_LIMIT" |
         head -"$CORPUS_SENTENCE_LIMIT" |
         cat > "$CORPUS_OUT/sentences.txt"
     ) || true # piping through python makes problems
@@ -48,7 +56,7 @@ fi
 if [ ! -s "$CORPUS_OUT/tokens.txt" ]; then
     echo "Tokenization...."
     (
-    pv "$CORPUS_OUT/sentences.txt" |
+    pv --line-mode -s "$(wc -l "$CORPUS_OUT/sentences.txt" | cut -f1 -d " ")" "$CORPUS_OUT/sentences.txt" |
         # ./tokenize_stanza.py "$LANG2" |
         cat > "$CORPUS_OUT/tokens.txt"
             ) || true # piping through python makes problems
@@ -70,6 +78,7 @@ fi
 
 DIR="$CORPUS_OUT"
 
+if [ ! -s "$DIR/${LANG}_model.sqlite" ]; then
 echo "Encoding $DIR/sentences.txt ..."
 cat -n "$DIR/sentences.txt" | paste - "$DIR/tokens.txt" | sed 's/"/\\"/g' > "$DIR/sentences.tsv"
 colibri-classencode "$DIR/tokens.txt" -d "$DIR/"
@@ -92,10 +101,11 @@ colibri-patternmodeller --inputmodel "$DIR/tokens.colibri.indexedpatternmodel" -
 
 echo "Creating sqlite database"
 ./import-data-sqlite.sh "$DIR/${LANG}_model.sqlite" "$DIR/sentences.tsv" "$DIR/tokens.patterns.tsv" "$DIR/tokens.reverse-index.tsv" || true
+fi
 
 
 echo "translating model"
-./translate_model.sh "$CORPUS" "$LANG" out/translations/translations.sqlite
+./translate_model.sh "$CORPUS" "$LANG"
 
 echo "copying to ui/public"
 rm -f ravioli-ui/public/languages/"${LANG}"*

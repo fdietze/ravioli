@@ -1,7 +1,8 @@
 # Ravioli
 
 # Build requirements
-`perl` `pv` `translate-shell` `yarn` `sponge`
+`perl` `pv` `translate-shell` `yarn` `sponge` `unzip` `hexdump` `ar`
+`cargo`
 
 ```
 python3 -m venv .venv

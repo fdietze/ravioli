@@ -5,42 +5,48 @@ shopt -s expand_aliases
 
 
 OUT="out"
-TRANS_OUT="$OUT/translations"
+TRANS_OUT="$OUT/translations_tatoeba"
 mkdir -p $TRANS_OUT
 
 SQLITEDB="$TRANS_OUT/translations.sqlite"
-if [ ! -s "$TRANS_OUT/translations.sqlite" ]; then
 # https://tatoeba.org (Multilingual collaborative sentence translation database)
 # https://tatoeba.org/eng/downloads
-(cd "$TRANS_OUT"; wget --no-verbose --show-progress --timestamping "https://downloads.tatoeba.org/exports/sentences_detailed.tar.bz2")
-(cd "$TRANS_OUT"; wget --no-verbose --show-progress --timestamping "https://downloads.tatoeba.org/exports/links.tar.bz2")
-(cd "$TRANS_OUT"; wget --no-verbose --show-progress --timestamping "https://downloads.tatoeba.org/exports/tags.tar.bz2")
-(cd "$TRANS_OUT"; wget --no-verbose --show-progress --timestamping "https://downloads.tatoeba.org/exports/sentences_with_audio.tar.bz2")
-(cd "$TRANS_OUT"; wget --no-verbose --show-progress --timestamping "https://downloads.tatoeba.org/exports/user_languages.tar.bz2")
-(cd "$TRANS_OUT"; wget --no-verbose --show-progress --timestamping "https://downloads.tatoeba.org/exports/users_sentences.csv")
+# (cd "$TRANS_OUT"; wget --no-verbose --show-progress --timestamping "https://downloads.tatoeba.org/exports/sentences_detailed.tar.bz2")
+# (cd "$TRANS_OUT"; wget --no-verbose --show-progress --timestamping "https://downloads.tatoeba.org/exports/links.tar.bz2")
+# (cd "$TRANS_OUT"; wget --no-verbose --show-progress --timestamping "https://downloads.tatoeba.org/exports/tags.tar.bz2")
+# (cd "$TRANS_OUT"; wget --no-verbose --show-progress --timestamping "https://downloads.tatoeba.org/exports/sentences_with_audio.tar.bz2")
+# (cd "$TRANS_OUT"; wget --no-verbose --show-progress --timestamping "https://downloads.tatoeba.org/exports/user_languages.tar.bz2")
+# (cd "$TRANS_OUT"; wget --no-verbose --show-progress --timestamping "https://downloads.tatoeba.org/exports/users_sentences.csv")
 
 
-echo "extracting and normalizing unicode..."
-(tar xOjf "$TRANS_OUT/sentences_detailed.tar.bz2" sentences_detailed.csv | ./normalize_unicode.sh > "$TRANS_OUT/sentences.tsv")
-(tar xOjf "$TRANS_OUT/links.tar.bz2" links.csv > "$TRANS_OUT/links.tsv")
-(tar xOjf "$TRANS_OUT/tags.tar.bz2" tags.csv > "$TRANS_OUT/tags.tsv")
-(tar xOjf "$TRANS_OUT/sentences_with_audio.tar.bz2" sentences_with_audio.csv > "$TRANS_OUT/sentences_with_audio.tsv")
-(tar xOjf "$TRANS_OUT/user_languages.tar.bz2" user_languages.csv > "$TRANS_OUT/user_languages.tsv")
-# [ -s "$TRANS_OUT/users_sentences.tsv" ] || (tar xOjf "$TRANS_OUT/users_sentences.tar.bz2" users_sentences.csv > "$TRANS_OUT/users_sentences.tsv")
+#echo "extracting and normalizing unicode..."
+#(tar xOjf "$TRANS_OUT/sentences_detailed.tar.bz2" sentences_detailed.csv | ./normalize_unicode.sh > "$TRANS_OUT/sentences.tsv")
+#(tar xOjf "$TRANS_OUT/links.tar.bz2" links.csv > "$TRANS_OUT/links.tsv")
+#(tar xOjf "$TRANS_OUT/tags.tar.bz2" tags.csv > "$TRANS_OUT/tags.tsv")
+#(tar xOjf "$TRANS_OUT/sentences_with_audio.tar.bz2" sentences_with_audio.csv > "$TRANS_OUT/sentences_with_audio.tsv")
+#(tar xOjf "$TRANS_OUT/user_languages.tar.bz2" user_languages.csv > "$TRANS_OUT/user_languages.tsv")
+## [ -s "$TRANS_OUT/users_sentences.tsv" ] || (tar xOjf "$TRANS_OUT/users_sentences.tar.bz2" users_sentences.csv > "$TRANS_OUT/users_sentences.tsv")
 
+SQLITE_INIT=$(cat << EOF
+.output /dev/null
+PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = OFF;
+PRAGMA synchronous = OFF;
+PRAGMA temp_store = MEMORY;
+PRAGMA cache_size=10000;
+PRAGMA mmap_size = 30000000000;
+.output
+EOF
+)
 
 echo "Creating translation database..."
-# some sentences referenced by links might be invalid. That's ok, because some sentences were deduplicated, for example https://tatoeba.org/eng/sentences/show/3094
+# some sentences referenced by links might be invalid. Thats ok, because some sentences were deduplicated, for example https://tatoeba.org/eng/sentences/show/3094
 # after normalization, there will be duplicated sentences in the database: https://github.com/Tatoeba/tatoeba2/issues/1970
 rm -f "$SQLITEDB"
 cat << EOF | sqlite3 -init "" "$SQLITEDB"
-
 .bail on
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = MEMORY;
-PRAGMA synchronous = OFF;
-
-SELECT "importing all sentences...";
+$SQLITE_INIT
+SELECT "importing sentences...";
 CREATE TABLE sentences(
   sentenceid INTEGER NOT NULL PRIMARY KEY,
   lang TEXT NOT NULL,
@@ -64,11 +70,9 @@ EOF
 
 # separate session to ignore foreign key errors
 cat << EOF | sqlite3 -init "" "$SQLITEDB" 2> /dev/null || true
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = MEMORY;
-PRAGMA synchronous = OFF;
+$SQLITE_INIT
 
-SELECT "importing all links...";
+SELECT "importing links...";
 CREATE TABLE links(
   sentenceid INTEGER NOT NULL,
   translationid INTEGER NOT NULL,
@@ -88,6 +92,7 @@ CREATE TABLE links(
 .separator "\t" "\n"
 .import '$TRANS_OUT/links.tsv' links
 
+ALTER TABLE links ADD COLUMN occurrences INTEGER NOT NULL DEFAULT 1;
 CREATE INDEX links_sentenceid_idx ON links (sentenceid);
 CREATE INDEX links_translationid_idx ON links (translationid);
 EOF
@@ -95,11 +100,9 @@ EOF
 
 # separate session to ignore foreign key errors
 cat << EOF | sqlite3 -init "" "$SQLITEDB" 2> /dev/null || true
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = MEMORY;
-PRAGMA synchronous = OFF;
+$SQLITE_INIT
 
-SELECT "importing all tags...";
+SELECT "importing tags...";
 CREATE TABLE tags(
   sentenceid INTEGER NOT NULL,
   tag TEXT NOT NULL,
@@ -122,11 +125,9 @@ EOF
 
 # separate session to ignore foreign key errors
 cat << EOF | sqlite3 -init "" "$SQLITEDB" 2> /dev/null || true
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = MEMORY;
-PRAGMA synchronous = OFF;
+$SQLITE_INIT
 
-SELECT "importing all sentences_with_audio...";
+SELECT "importing sentences_with_audio...";
 CREATE TABLE sentences_with_audio(
   sentenceid INTEGER NOT NULL,
   username TEXT NOT NULL,
@@ -151,11 +152,9 @@ EOF
 
 # separate session to ignore foreign key errors
 cat << EOF | sqlite3 -init "" "$SQLITEDB" 2> /dev/null || true
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = MEMORY;
-PRAGMA synchronous = OFF;
+$SQLITE_INIT
 
-SELECT "importing all user_languages...";
+SELECT "importing user_languages...";
 CREATE TABLE user_languages(
   lang TEXT NOT NULL,
   skill_level INTEGER NOT NULL,
@@ -175,9 +174,11 @@ EOF
 
 cat << EOF | sqlite3 -init "" "$SQLITEDB"
 .bail on
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = MEMORY;
-PRAGMA synchronous = OFF;
+$SQLITE_INIT
+
+-- Some sentences have the string '\N' in the language field (unknown language): https://github.com/Tatoeba/tatoeba2/issues/2578
+SELECT "deleting sentences with unknown language...";
+DELETE FROM sentences WHERE lang = '\\N';
 
 -- some backlinks are missing...
 -- https://github.com/Tatoeba/tatoeba2/issues/2579
@@ -204,13 +205,78 @@ DELETE FROM sentences WHERE sentenceid IN (WITH duplicates as (select min(senten
 
 
 
+SELECT "precomputing sentence degrees...";
+ALTER TABLE sentences ADD COLUMN degree INTEGER NOT NULL DEFAULT 1;
+UPDATE sentences
+SET degree = (SELECT sum(occurrences) FROM links l WHERE l.sentenceid = sentences.sentenceid group by l.sentenceid)
+WHERE sentenceid IN (SELECT sentenceid FROM links);
+
+SELECT "precomputing sentence degrees per language...";
+create TABLE lang_degree(
+    sentenceid INTEGER NOT NULL,
+    lang TEXT NOT NULL,
+    degree INTEGER NOT NULL,
+
+    PRIMARY KEY(sentenceid, lang)
+);
+
+INSERT INTO lang_degree(sentenceid, lang, degree)
+SELECT l.sentenceid, t.lang, sum(l.occurrences)
+FROM links l
+JOIN sentences t ON t.sentenceid = l.translationid
+GROUP BY l.sentenceid, t.lang;
+
+SELECT "precomputing second-level sentence degrees per language...";
+create TABLE lang_degree2(
+    sentenceid INTEGER NOT NULL,
+    lang TEXT NOT NULL,
+    degree2 INTEGER NOT NULL,
+
+    PRIMARY KEY(sentenceid, lang)
+);
+
+INSERT INTO lang_degree2(sentenceid, lang, degree2)
+SELECT l.sentenceid, d2.lang, sum(l.occurrences*d2.degree) AS degree2
+FROM links l
+JOIN lang_degree d2 ON d2.sentenceid = l.translationid
+GROUP BY l.sentenceid, d2.lang
+;
+
+
+CREATE VIEW direct_translations AS
+    SELECT s.sentenceid as sourceid, t.lang, ts.sentenceid targetid, CAST(l.occurrences as real)/t.degree as probability
+    FROM sentences s
+    JOIN links l ON l.sentenceid = s.sentenceid
+    JOIN sentences ts ON ts.sentenceid = l.translationid
+    JOIN lang_degree t ON t.sentenceid = s.sentenceid AND ts.lang = t.lang;
+
+CREATE VIEW chain2 AS
+    select l1.sentenceid, l1.translationid as l1_translationid, l1.occurrences as l1_occurrences, l2.translationid as l2_translationid, l2.occurrences as l2_occurrences from links l1 JOIN links l2 ON l2.sentenceid = l1.translationid;
+
+CREATE VIEW chain2_acyclic AS
+    select * FROM chain2 l WHERE l.sentenceid != l.l2_translationid;
+
+CREATE VIEW indirect_translations_ungrouped AS
+    SELECT
+        l.sentenceid as sourceid,
+        sp.lang as pivot_lang,
+        st.lang as lang,
+        st.sentenceid as targetid,
+        CAST(l.l1_occurrences * l.l2_occurrences as real)/d2.degree2 as probability
+    FROM chain2_acyclic l
+    JOIN sentences sp  ON sp.sentenceid  = l.l1_translationid
+    JOIN sentences st ON st.sentenceid = l.l2_translationid
+    JOIN lang_degree2 d2 ON d2.sentenceid = sourceid AND d2.lang = st.lang;
+
+
+-- PRAGMA foreign_key_check;
+
 .headers off
+SELECT "optimize...";
+PRAGMA optimize;
 SELECT "vacuum...";
 VACUUM;
 
-SELECT "checking database integrity...";
-PRAGMA integrity_check;
 EOF
 
 ls -lh $SQLITEDB
-fi

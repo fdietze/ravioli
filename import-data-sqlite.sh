@@ -16,9 +16,14 @@ rm -f "$SQLITEDB"
 cat << EOF | sqlite3 -init "" "$SQLITEDB"
 
 .bail on
+.output /dev/null
 PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = MEMORY;
+PRAGMA journal_mode = OFF;
 PRAGMA synchronous = OFF;
+PRAGMA temp_store = MEMORY;
+PRAGMA cache_size=10000;
+PRAGMA mmap_size = 30000000000;
+.output
 
 
 SELECT "importing all sentences...";
@@ -89,9 +94,14 @@ EOF
 
 # separate session to ignore foreign key errors
 cat << EOF | sqlite3 -init "" "$SQLITEDB" 2> /dev/null || true
+.output /dev/null
 PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = MEMORY;
+PRAGMA journal_mode = OFF;
 PRAGMA synchronous = OFF;
+PRAGMA temp_store = MEMORY;
+PRAGMA cache_size=10000;
+PRAGMA mmap_size = 30000000000;
+.output
 .mode tabs
 .import '$REVERSEINDEX' reverseindex
 
@@ -104,9 +114,14 @@ EOF
 
 cat << EOF | sqlite3 -init "" "$SQLITEDB"
 .bail on
+.output /dev/null
 PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = MEMORY;
+PRAGMA journal_mode = OFF;
 PRAGMA synchronous = OFF;
+PRAGMA temp_store = MEMORY;
+PRAGMA cache_size=10000;
+PRAGMA mmap_size = 30000000000;
+.output
 
 
 SELECT "removing sentences with unknown patterns (below counted threshold)...";
@@ -149,12 +164,13 @@ ALTER TABLE patterns ADD COLUMN proficiency INTEGER NOT NULL DEFAULT 0;
 -- .fullschema
 
 .headers off
+SELECT "optimize...";
+ANALYZE;
+PRAGMA optimize;
 SELECT "vacuum...";
 VACUUM;
-
-SELECT "checking database integrity...";
-PRAGMA integrity_check;
 ;
+
 
 
 EOF

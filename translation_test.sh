@@ -2,11 +2,14 @@
 set -Eeuo pipefail # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/#:~:text=set%20%2Du,is%20often%20highly%20desirable%20behavior.
 # shopt -s expand_aliases
 
-SENTENCE='Comment ça se passe ?'
-SOURCELANG='fra'
-TARGETLANG='deu'
+DBFILE=${1-"out/translations/translations.sqlite"}
+SOURCELANG=${2-'fra'}
+TARGETLANG=${3-'deu'}
+SENTENCE=${4-'Salut.'}
 
-cat << EOF | sqlite3 -init "" "out/translations/translations.sqlite"
+SENTENCE=$(echo "$SENTENCE" | sed "s/'/''/g" | ./normalize_unicode.sh) # escape single quotes for sqlite
+
+cat << EOF | sqlite3 -init "" "$DBFILE"
 .mode column
 .headers on
 
@@ -19,50 +22,89 @@ EOF
 
 echo ""
 
-cat << EOF | sqlite3 -init "" "out/translations/translations.sqlite"
+cat << EOF | sqlite3 -init "" "$DBFILE"
 .mode column
 .headers on
+-- .width auto auto auto
 
-SELECT s2.sentence as direct_translation
-FROM sentences s1
-JOIN links l ON l.sentenceid = s1.sentenceid
-JOIN sentences s2 ON l.translationid = s2.sentenceid
-WHERE
-    s1.sentence = '$SENTENCE' AND s1.lang = '$SOURCELANG'
-    AND s2.lang = '$TARGETLANG'
-;
-EOF
-
+.output /dev/null
+PRAGMA journal_mode = OFF;
+PRAGMA synchronous = OFF;
+PRAGMA temp_store = MEMORY;
+pragma mmap_size = 30000000000;
+pragma threads = 4;
+.output
 
 
-echo ""
 
-# echo "A  -- X  -- O  -- X  -- A"
-# echo "s1 -- s2 -- s3 -- s4 -- s5"
-# echo "s1  -l1->  s2  -l2->  s3  -l3->  s4  -l4->  s5"
 
-cat << EOF | sqlite3 -init "" "out/translations/translations.sqlite"
-.mode column
+SELECT t.sentence, probability
+FROM sentences s
+JOIN direct_translations d ON d.sourceid = s.sentenceid
+JOIN sentences t ON t.sentenceid = d.targetid
+WHERE d.lang = '$TARGETLANG' AND s.sentence = '$SENTENCE' AND s.lang = '$SOURCELANG'
+ORDER BY probability DESC;
+
+
+
+.headers off
+SELECT "";
+SELECT "indirect translations...";
 .headers on
+-- #    /-- X --\
+-- #  S --- Y --- ST
+-- #    \-- Z --|
+-- #    \--...--/
 
-SELECT sentence as indirect_translation, COUNT(*) FROM
-(SELECT s3.sentence
-FROM sentences s1
-JOIN links l1 ON l1.sentenceid = s1.sentenceid
-JOIN links l2 ON l2.sentenceid = l1.translationid
-JOIN sentences s3 ON s3.sentenceid = l2.translationid
-JOIN links l3 ON l3.sentenceid = l2.translationid
-JOIN links l4 ON l4.sentenceid = l3.translationid
-WHERE
-        s1.lang = '$SOURCELANG' AND s1.sentence = '$SENTENCE'
-    AND s3.lang = '$TARGETLANG'
-    AND l4.translationid = s1.sentenceid -- close cycle
 
-    AND s1.sentenceid != l1.translationid
-    AND l1.translationid != l2.translationid
-    AND l2.translationid != l3.translationid
-    )
-GROUP BY sentence
-ORDER BY COUNT(*) DESC
-;
+
+-- EXPLAIN QUERY PLAN
+SELECT ts.sentence, GROUP_CONCAT(pivot_lang), sum(probability)
+FROM sentences s
+JOIN indirect_translations_ungrouped t
+    ON t.sourceid = s.sentenceid AND t.lang = '$TARGETLANG'
+JOIN sentences ts ON ts.sentenceid = t.targetid
+WHERE s.sentence = '$SENTENCE' AND s.lang = '$SOURCELANG'
+GROUP BY t.targetid
+HAVING COUNT(DISTINCT pivot_lang) >= 2
+ORDER BY sum(probability) DESC;
+
+
+
+-- SELECT s.sentence, ts.lang, ts.sentence, sum(probability) as probability
+-- FROM sentences s
+-- JOIN indirect_translations_ungrouped t ON t.sourceid = s.sentenceid
+-- JOIN sentences ts ON ts.sentenceid = t.targetid
+-- WHERE s.sentenceid < 1000
+-- GROUP BY s.sentenceid, t.targetid
+-- HAVING sum(probability) > 0.1
+-- ORDER BY s.sentenceid, probability DESC
+-- ;
+
+
+
+-- WITH source as (SELECT * FROM sentences WHERE lang = '$SOURCELANG' AND sentence = '$SENTENCE'),
+--      data as (
+--     SELECT
+--         sp.lang as pivot_lang,
+--         st.sentence,
+--         st.sentenceid,
+--         l.l1_occurrences * l.l2_occurrences as occurrences
+--     FROM chain2_acyclic l
+--     JOIN source s  ON s.sentenceid  = l.sentenceid
+--     JOIN sentences sp  ON sp.sentenceid  = l.l1_translationid
+--     JOIN sentences st ON st.sentenceid = l.l2_translationid
+--     WHERE
+--         st.lang = '$TARGETLANG'
+--     UNION ALL
+--     SELECT '','',0,0 WHERE 0 = 1 -- forces sqlite to use temp b-tree for grouping
+-- )
+-- SELECT sentence, GROUP_CONCAT(pivot_lang), CAST(sum(occurrences) as real)/(SELECT degree2 FROM lang_degree2 d2 WHERE d2.sentenceid IN (SELECT sentenceid FROM source) AND d2.lang = '$TARGETLANG') as probability
+-- FROM data
+-- GROUP BY sentenceid
+-- HAVING COUNT(distinct pivot_lang) >= 2
+-- ORDER BY probability DESC
+-- ;
+
+
 EOF

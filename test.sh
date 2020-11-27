@@ -10,15 +10,15 @@ PATTERNSCOREFN='2*(1/p.coverage) + MIN(1/s.coverage)'
 # PATTERNSCOREFN='(1/p.coverage) + MIN(1/s.coverage)'
 # PATTERNSCOREFN='(1/p.coverage) + sqrt(MIN(1/s.coverage))'
 SENTENCESCOREFN='((1/ss.coverage) + AVG(1/p.coverage*(p.proficiency+1)*(p.proficiency+1)))/(s.matched_patterns*s.matched_patterns*s.matched_patterns)' # default proficiency is 0
-POTENTIAL_SENTENCE_LIMIT=2000;
-PATTERN_LIMIT=50;
+POTENTIAL_SENTENCE_LIMIT=1000;
+PATTERN_LIMIT=3;
 
 GAP=4
 # TODO: MAXGAP = log(10000)/log($GAP)
 
 
 SELECT_NEXT_PATTERNS="SELECT p.pattern FROM patterns p JOIN reverseindex r ON r.pattern = p.pattern JOIN sentences s ON s.sentenceid = r.sentenceid WHERE next_test <= (SELECT time FROM tick LIMIT 1) GROUP BY p.rank ORDER BY ${PATTERNSCOREFN} LIMIT ${PATTERN_LIMIT}"
-SELECT_POTENTIAL_SENTENCES="SELECT r.sentenceid, COUNT(DISTINCT p.pattern) as matched_patterns FROM reverseindex r JOIN sentences s ON s.sentenceid = r.sentenceid JOIN patterns p ON r.pattern = p.pattern WHERE p.pattern IN next_patterns GROUP BY r.sentenceid ORDER BY matched_patterns DESC, s.coverage DESC LIMIT ${POTENTIAL_SENTENCE_LIMIT}"
+SELECT_POTENTIAL_SENTENCES="SELECT r.sentenceid, COUNT(DISTINCT p.pattern) as matched_patterns FROM reverseindex r JOIN sentences s ON s.sentenceid = r.sentenceid JOIN patterns p ON r.pattern = p.pattern WHERE p.pattern IN next_patterns GROUP BY r.sentenceid ORDER BY s.coverage DESC LIMIT ${POTENTIAL_SENTENCE_LIMIT}"
 
 # see what will be next
 cat << EOF | sqlite3 "$SQLITEDB"
@@ -38,7 +38,7 @@ SELECT p.rank, p.pattern, $PATTERNSCOREFN as score, next_test - (SELECT time FRO
 WITH
     next_patterns as ($SELECT_NEXT_PATTERNS),
     potential_sentences as ($SELECT_POTENTIAL_SENTENCES)
-SELECT s.sentenceid, s.matched_patterns, ss.sentence, group_concat(p.pattern || '['|| p.rank ||']' || ': ' || p.proficiency, ', ') as patterns, cast(1/ss.coverage as INTEGER) as '1/cov',
+SELECT ss.coverage, s.matched_patterns, ss.sentence,  cast(1/ss.coverage as INTEGER) as '1/cov',
         $SENTENCESCOREFN as score
 FROM potential_sentences as s
 JOIN reverseindex as r ON s.sentenceid = r.sentenceid
@@ -67,7 +67,7 @@ JOIN reverseindex as r ON s.sentenceid = r.sentenceid
 LEFT OUTER JOIN patterns as p ON r.pattern = p.pattern
 JOIN sentences ss on ss.sentenceid = s.sentenceid
 GROUP BY r.sentenceid
-ORDER BY $SENTENCESCOREFN ASC
+ORDER BY ${SENTENCESCOREFN} ASC
 LIMIT 1
 ;
 EOF
@@ -91,14 +91,14 @@ time=$(q "SELECT time from tick LIMIT 1")
 
 echo "$time: $sentence"
 
-IFS=$'\n'
-patterns=(`q "SELECT p.rank from reverseindex r JOIN patterns p ON r.pattern = p.pattern  WHERE sentenceid = $sentenceid"`)
+# IFS=$'\n'
+# patterns=(`q "SELECT p.rank from reverseindex r JOIN patterns p ON r.pattern = p.pattern  WHERE sentenceid = $sentenceid"`)
 
-for rank in "${patterns[@]}"; do
-    q -cmd ".load ./extension-functions" "UPDATE patterns SET proficiency = proficiency + 1, next_test = (SELECT time from tick LIMIT 1) + power($GAP, max(0, min(8, proficiency+2))) WHERE rank = '$rank';"
-    # q -cmd ".load ./extension-functions" "UPDATE patterns SET proficiency = proficiency - 1, next_test = (SELECT time from tick LIMIT 1) + $GAP WHERE rank = '$rank';"
-done
+# for rank in "${patterns[@]}"; do
+#     q -cmd ".load ./extension-functions" "UPDATE patterns SET proficiency = proficiency + 1, next_test = (SELECT time from tick LIMIT 1) + power($GAP, max(0, min(8, proficiency+2))) WHERE rank = '$rank';"
+#     # q -cmd ".load ./extension-functions" "UPDATE patterns SET proficiency = proficiency - 1, next_test = (SELECT time from tick LIMIT 1) + $GAP WHERE rank = '$rank';"
+# done
 
-q "UPDATE tick SET time = time + 1"
+# q "UPDATE tick SET time = time + 1"
 
 
