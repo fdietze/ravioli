@@ -9,23 +9,23 @@ export function getSentence(db: SqlJs.Database, sentenceId: string): string {
   return res[0].values[0][0].toString();
 }
 
-export function getSentencePatterns(db: SqlJs.Database, sentenceId: string): Array<string> {
+export function getSentencePatterns(db: SqlJs.Database, sentenceId: string): Array<{pattern:string, proficiency:number}> {
   console.log(`getSentencePatterns(${sentenceId})`);
   const res = db.exec(
-    `SELECT p.pattern from reverseindex r JOIN patterns p ON r.pattern = p.pattern  WHERE sentenceid = ${sentenceId}`
+    `SELECT p.pattern, p.proficiency from reverseindex r JOIN patterns p ON r.pattern = p.pattern  WHERE sentenceid = ${sentenceId}`
   );
-  return res[0].values.map((val) => val[0].toString());
+  return res[0].values.map((val) => ({pattern: val[0].toString(), proficiency: val[1] as number}));
 }
 
 export function getNextSentenceId(db: SqlJs.Database): string {
   console.log(`getNextSentenceId()`);
   const PATTERNSCOREFN = "2*(1/p.coverage) + MIN(1/s.coverage)";
   const SENTENCESCOREFN='((1/ss.coverage) + AVG(1/p.coverage*(p.proficiency+1)*(p.proficiency+1)))/(s.matched_patterns*s.matched_patterns*s.matched_patterns)' // default proficiency is 0
-  const POTENTIAL_SENTENCE_LIMIT = 2000;
-  const PATTERN_LIMIT = 50;
+  const POTENTIAL_SENTENCE_LIMIT = 50;
+  const PATTERN_LIMIT = 3;
   
   const SELECT_NEXT_PATTERNS=`SELECT p.pattern FROM patterns p JOIN reverseindex r ON r.pattern = p.pattern JOIN sentences s ON s.sentenceid = r.sentenceid WHERE next_test <= (SELECT time FROM tick LIMIT 1) GROUP BY p.rank ORDER BY ${PATTERNSCOREFN} LIMIT ${PATTERN_LIMIT}`
-  const SELECT_POTENTIAL_SENTENCES=`SELECT r.sentenceid, COUNT(DISTINCT p.pattern) as matched_patterns FROM reverseindex r JOIN sentences s ON s.sentenceid = r.sentenceid JOIN patterns p ON r.pattern = p.pattern WHERE p.pattern IN next_patterns GROUP BY r.sentenceid ORDER BY matched_patterns DESC, s.coverage DESC LIMIT ${POTENTIAL_SENTENCE_LIMIT}`
+  const SELECT_POTENTIAL_SENTENCES=`SELECT r.sentenceid, COUNT(DISTINCT p.pattern) as matched_patterns FROM reverseindex r JOIN sentences s ON s.sentenceid = r.sentenceid JOIN patterns p ON r.pattern = p.pattern WHERE p.pattern IN next_patterns GROUP BY r.sentenceid ORDER BY s.coverage DESC LIMIT ${POTENTIAL_SENTENCE_LIMIT}`
 
   const query = `
     WITH
@@ -39,7 +39,7 @@ export function getNextSentenceId(db: SqlJs.Database): string {
     LEFT OUTER JOIN patterns as p ON r.pattern = p.pattern
     JOIN sentences ss on ss.sentenceid = s.sentenceid
     GROUP BY r.sentenceid
-    ORDER BY $SENTENCESCOREFN ASC
+    ORDER BY ${SENTENCESCOREFN} ASC
     LIMIT 1
         `;
 
@@ -94,5 +94,5 @@ export function getPatternOverview(db: SqlJs.Database): Array<{pattern:string, r
   );
 
   if(res.length == 0) return [];
-  return res[0].values.map((val) => { return {rank: val[0] as number, pattern: val[1] as string, proficiency: val[2] as number} });
+  return res[0].values.map((val) => ({rank: val[0] as number, pattern: val[1] as string, proficiency: val[2] as number}));
 }

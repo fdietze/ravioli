@@ -3,11 +3,11 @@ import type {SqlJs} from "sql.js/module";
 const translateGoogleAPI = setCORS("http://cors-anywhere.herokuapp.com/");
 
 
-export function translateSentenceFromDb(db: SqlJs.Database, sentenceId:string):Array<string> {
+export function translateSentenceFromDb(db: SqlJs.Database, sentenceId: string): Array<{translation: string, probability: number}> {
   console.log(`translateSentenceFromDb(${sentenceId})`);
-  const res = db.exec(`SELECT sentence FROM translations t WHERE t.sentenceid = ${sentenceId} ORDER BY level LIMIT 3`);
-  if(res.length == 0) return [];
-  return res[0].values.map(a => a[0].toString());
+  const res = db.exec(`SELECT translation, probability FROM translations t WHERE t.sentenceid = ${sentenceId} ORDER BY probability DESC`);
+  if (res.length == 0) return [];
+  return res[0].values.map(a => { return {translation: a[0].toString(), probability: a[1] as number}});
 }
 
 export const translate = translateGoogle;
@@ -19,7 +19,7 @@ async function translateGoogle(
 ): Promise<string> {
   if (text == "") return "";
 
-  const res:any = await translateGoogleAPI(text, {from: source_lang, to: target_lang});
+  const res: any = await translateGoogleAPI(text, {from: source_lang, to: target_lang});
   console.log('Google Translate:', text, '->', res.text)
   return res.text;
 }

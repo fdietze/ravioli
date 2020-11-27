@@ -17,7 +17,6 @@
     import Diff from "diff";
     import {
         Observable,
-        BehaviorSubject,
         ReplaySubject,
         Subject,
         from,
@@ -45,7 +44,10 @@
     const available_languages: Array<{
         lang: string;
         translations: Array<string>;
-    }> = "AVAILABLE_LANGUAGES"; // will be filled at build time
+    }> = ("AVAILABLE_LANGUAGES" as unknown) as Array<{
+        lang: string;
+        translations: Array<string>;
+    }>; // will be filled at build time
     const userInput = new SvelteSubject("");
     let showDiff = false;
     let inputField: HTMLInputElement;
@@ -116,15 +118,24 @@
         share(),
         startWith("")
     );
-    const currentPatterns: Observable<Array<string>> = zip(
-        modelDb,
-        currentSentenceId
-    ).pipe(
+    const currentPatterns: Observable<Array<{
+        pattern: string;
+        proficiency: number;
+    }>> = zip(modelDb, currentSentenceId).pipe(
         map(([modelDb, sentenceId]) =>
             getSentencePatterns(modelDb, sentenceId)
         ),
         share(),
-        startWith([])
+        startWith(
+            new Array<{
+                pattern: string;
+                proficiency: number;
+            }>()
+        )
+    );
+
+    const minProficiency = currentPatterns.pipe(
+        map((ps) => Math.min(...ps.map((p) => p.proficiency)))
     );
 
     const matchedPatterns: Observable<Array<{
@@ -136,13 +147,21 @@
     ]).pipe(
         map(([userInput, [currentSentence, currentPatterns]]) =>
             currentPatterns.map((pattern) => {
-                const regex = modelPatternToRegExp(pattern, currentSentence);
+                const regex = modelPatternToRegExp(
+                    pattern.pattern,
+                    currentSentence
+                );
                 const matched = regex.test(userInput);
-                return { pattern: pattern, matched: matched };
+                return { pattern: pattern.pattern, matched: matched };
             })
         ),
         share(),
-        startWith([])
+        startWith(
+            new Array<{
+                pattern: string;
+                matched: boolean;
+            }>()
+        )
     );
 
     const allPatternsMatch: Observable<boolean> = matchedPatterns.pipe(
@@ -156,10 +175,10 @@
         startWith(false)
     );
 
-    const currentTranslations: Observable<Array<string>> = combineLatest([
-        translationDb,
-        currentSentenceId,
-    ]).pipe(
+    const currentTranslations: Observable<Array<{
+        translation: string;
+        probability: number;
+    }>> = combineLatest([translationDb, currentSentenceId]).pipe(
         map(([translationDb, sentenceId]) =>
             translateSentenceFromDb(translationDb, sentenceId)
         ),
@@ -205,8 +224,7 @@
                 Diff.diffChars(currentSentence, userInput)
                     .filter((p) => !p.added && !p.removed)
                     .map((p) => p.value.length)
-                    .reduce((acc, val) => acc + val, 0) /
-                currentSentence.length
+                    .reduce((acc, val) => acc + val, 0) / currentSentence.length
         )
     );
     const errorProgress = combineLatest([userInput, currentSentence]).pipe(
@@ -223,7 +241,7 @@
     );
 
     const proposedWords = currentSentence.pipe(
-        map(getProposedWords),
+        map((sentence) => getProposedWords(sentence)),
         startWith([])
     );
 </script>
@@ -257,18 +275,23 @@
                         class="bg-green-500 text-white font-bold rounded py-2 px-4 mr-1">{t}</button>
                 {/each}
             {:else}
-                {#each $currentTranslations as sentence}
-                    <div class="text-2xl">{sentence}</div>
+                    {#each $currentTranslations as t}
+                        <div
+                            class="text-2xl"
+                            style={`opacity: ${t.probability}`}>
+                            {t.translation}
+                            ({Math.round(t.probability * 100)}%)
+                        </div>
                 {/each}
                 {#if showDiff}
-                    {#if $userInput != ''}
-                        <div>{$currentSentence}</div>
-                    {/if}
-                    <div>
+                        <div class="text-xl">
                         <SentenceDiff
                             original={$currentSentence}
                             userInput={$userInput} />
                     </div>
+                        {#if $userInput != ''}
+                            <div class="text-xl">{$currentSentence}</div>
+                        {/if}
                     <button
                         on:click={() => pressedEnter.next()}
                         class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Next</button>
@@ -279,13 +302,14 @@
                             bind:this={inputField}
                             type="text"
                             class="border rounded w-full py-2 px-3 leading-tight outline-none focus:shadow-outline"
-                            placeholder="Type {$lang} translation" />
+                                placeholder="Type translation ({$lang})" />
                         <button
                             on:click={() => pressedEnter.next()}
                             class="ml-1 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Check</button>
                     </div>
                 {/if}
                 {#if !showDiff}
+                        {#if $minProficiency <= 2}
                     <div
                         class="mt-2 h-3 relative max-w-xl rounded-full overflow-hidden">
                         <div class="w-full h-full bg-gray-200 absolute" />
@@ -293,6 +317,8 @@
                             class="h-full bg-green-500 absolute"
                             style="width:{$diffProgress * 100}%" />
                     </div>
+                        {/if}
+                        {#if $minProficiency <= 1}
                     <div
                         class="mt-2 h-3 relative max-w-xl rounded-full overflow-hidden">
                         <div class="w-full h-full bg-gray-200 absolute" />
@@ -300,6 +326,8 @@
                             class="h-full bg-red-500 absolute"
                             style="width:{$errorProgress * 100}%" />
                     </div>
+                        {/if}
+                        {#if $minProficiency <= 0}
                     {#each $proposedWords as word}
                         <button
                             on:click={async () => {
@@ -310,9 +338,10 @@
                             class="mr-1 mt-2 hover:bg-gray-200 py-2 px-4 border rounded focus:outline-none focus:shadow-outline text-white hover:text-black">{word}</button>
                     {/each}
                 {/if}
+                    {/if}
 
                 <!--
-            {#each matchedPatterns as pattern}
+                    {#each $matchedPatterns as pattern}
                 <div style={pattern.matched ? 'color: green' : ''}>
                     {pattern.pattern}
                 </div>

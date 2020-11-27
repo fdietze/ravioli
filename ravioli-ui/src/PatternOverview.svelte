@@ -8,7 +8,7 @@
 
 <main>
     <div
-        class="h-full ml-2 w-6 flex flex-col bg-gray-800 border-4 rounded border-gray-900">
+        class="h-full ml-2 w-8 flex flex-col bg-gray-800 border-4 rounded border-gray-900">
         {#each data as pattern (pattern.rank)}
             <div
                 title={pattern.pattern}
