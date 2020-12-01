@@ -2,25 +2,27 @@
 set -Eeuo pipefail # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/#:~:text=set%20%2Du,is%20often%20highly%20desirable%20behavior.
 # shopt -s expand_aliases
 
-DBFILE=${1-"out/translations/translations.sqlite"}
+PATH=$PATH:$HOME/projects/postgresqlite
+
+
+DBFILE=${1-"out/translations/translations.pg"}
 SOURCELANG=${2-'fra'}
 TARGETLANG=${3-'deu'}
 SENTENCE=${4-'Salut.'}
 
 SENTENCE=$(echo "$SENTENCE" | sed "s/'/''/g" | ./normalize_unicode.sh) # escape single quotes for sqlite
 
-cat << EOF | sqlite3 -init "" "$DBFILE"
-.mode column
-.headers on
 
+SQL=$(cat << EOF
 SELECT sentenceid, sentence
 FROM sentences
 WHERE
     sentence = '$SENTENCE' AND lang = '$SOURCELANG'
-;
 EOF
+)
+postgresqlite "$DBFILE" "$SQL"
 
-echo ""
+exit
 
 cat << EOF | sqlite3 -init "" "$DBFILE"
 .mode column
