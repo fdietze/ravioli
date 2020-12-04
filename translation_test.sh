@@ -6,8 +6,9 @@ DBFILE=${1-"out/translations/translations.sqlite"}
 SOURCELANG=${2-'fra'}
 TARGETLANG=${3-'deu'}
 SENTENCE=${4-'Salut.'}
+MIN_COVERAGE=0.5
 
-SENTENCE=$(echo "$SENTENCE" | sed "s/'/''/g" | ./normalize_unicode.sh) # escape single quotes for sqlite
+SENTENCE=$(echo "${SENTENCE//\'/\'\'}" | ./normalize_unicode.sh) # escape single quotes for sqlite
 
 cat << EOF | sqlite3 -init "" "$DBFILE"
 .mode column
@@ -38,12 +39,20 @@ pragma threads = 4;
 
 
 
-SELECT t.sentence, probability
-FROM sentences s
-JOIN direct_translations d ON d.sourceid = s.sentenceid
-JOIN sentences t ON t.sentenceid = d.targetid
-WHERE d.lang = '$TARGETLANG' AND s.sentence = '$SENTENCE' AND s.lang = '$SOURCELANG'
-ORDER BY probability DESC;
+SELECT sentence, probability, cumu
+FROM (
+    SELECT sentence, probability, SUM(probability) OVER (ROWS UNBOUNDED PRECEDING) as cumu
+    FROM (
+        SELECT t.sentence, probability
+        FROM sentences s
+        JOIN direct_translations d ON d.sourceid = s.sentenceid
+        JOIN sentences t ON t.sentenceid = d.targetid
+        WHERE d.lang = '$TARGETLANG' AND s.sentence = '$SENTENCE' AND s.lang = '$SOURCELANG'
+        ORDER BY probability DESC
+    )
+)
+WHERE cumu - probability <= $MIN_COVERAGE
+;
 
 
 
@@ -57,30 +66,26 @@ SELECT "indirect translations...";
 -- #    \--...--/
 
 
-
 -- EXPLAIN QUERY PLAN
-SELECT ts.sentence, GROUP_CONCAT(pivot_lang), sum(probability)
-FROM sentences s
-JOIN indirect_translations_ungrouped t
-    ON t.sourceid = s.sentenceid AND t.lang = '$TARGETLANG'
-JOIN sentences ts ON ts.sentenceid = t.targetid
-WHERE s.sentence = '$SENTENCE' AND s.lang = '$SOURCELANG'
-GROUP BY t.targetid
-HAVING COUNT(DISTINCT pivot_lang) >= 2
-ORDER BY sum(probability) DESC;
+SELECT sentence, prob, cumu
+FROM (
+    SELECT sentenceid, sentence, prob, SUM(prob) OVER (ROWS UNBOUNDED PRECEDING) as cumu
+    FROM (
+        SELECT ts.sentenceid, ts.sentence, sum(probability) as prob
+        FROM sentences s
+        JOIN indirect_translations_ungrouped t
+            ON t.sourceid = s.sentenceid AND t.lang = '$TARGETLANG'
+        JOIN sentences ts ON ts.sentenceid = t.targetid
+        WHERE s.sentence = '$SENTENCE' AND s.lang = '$SOURCELANG'
+        GROUP BY t.targetid
+        HAVING COUNT(DISTINCT pivot_lang) >= 2
+        ORDER BY prob DESC
+    )
+)
+WHERE cumu - prob <= $MIN_COVERAGE
 
 
-
--- SELECT s.sentence, ts.lang, ts.sentence, sum(probability) as probability
--- FROM sentences s
--- JOIN indirect_translations_ungrouped t ON t.sourceid = s.sentenceid
--- JOIN sentences ts ON ts.sentenceid = t.targetid
--- WHERE s.sentenceid < 1000
--- GROUP BY s.sentenceid, t.targetid
--- HAVING sum(probability) > 0.1
--- ORDER BY s.sentenceid, probability DESC
--- ;
-
+;
 
 
 -- WITH source as (SELECT * FROM sentences WHERE lang = '$SOURCELANG' AND sentence = '$SENTENCE'),
