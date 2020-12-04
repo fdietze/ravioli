@@ -112,7 +112,7 @@ CREATE TABLE links(
       REFERENCES sentences (sentenceid)
       ON UPDATE CASCADE
       ON DELETE CASCADE
-);
+) WITHOUT ROWID;
 -- earlier, to speed up intermediate pruning
 CREATE INDEX links_sentenceid_idx ON links (sentenceid);
 CREATE INDEX links_translationid_idx ON links (translationid);
@@ -230,6 +230,9 @@ SELECT "pruning low occurrence sentences in $LANGA (< $MIN_OCCURRENCES)...";
 PRAGMA foreign_keys = ON;
 DELETE FROM sentences WHERE lang = '$LANGA3' AND occurrences < $MIN_OCCURRENCES;
 
+.output /dev/null
+PRAGMA temp_store = FILE; -- for vacuum
+.output
 .headers off
 SELECT "optimize...";
 PRAGMA optimize;
@@ -281,6 +284,7 @@ SELECT l.sentenceid, t.lang, sum(l.occurrences)
 FROM links l
 JOIN sentences t ON t.sentenceid = l.translationid
 GROUP BY l.sentenceid, t.lang;
+CREATE INDEX lang_degree_sentenceid_lang_idx ON lang_degree (sentenceid, lang);
 
 SELECT "precomputing second-level sentence degrees per language...";
 create TABLE lang_degree2(
@@ -292,8 +296,7 @@ create TABLE lang_degree2(
 );
 
 .output /dev/null
-PRAGMA journal_mode = DELETE; -- have journal on-disk, because else it might be too big for memory
-PRAGMA temp_store = FILE;
+PRAGMA temp_store = FILE; -- have temporary table on-disk, because it might be too big for memory
 .output
 INSERT INTO lang_degree2(sentenceid, lang, degree2)
 SELECT l.sentenceid, d2.lang, sum(l.occurrences*d2.degree) AS degree2
@@ -301,6 +304,7 @@ FROM links l
 JOIN lang_degree d2 ON d2.sentenceid = l.translationid
 GROUP BY l.sentenceid, d2.lang
 ;
+CREATE INDEX lang_degree2_sentenceid_lang_idx ON lang_degree2 (sentenceid, lang);
 
 
 CREATE VIEW direct_translations AS
