@@ -90,12 +90,11 @@ CREATE TABLE sentences(
   sentence TEXT NOT NULL,
   occurrences INTEGER NOT NULL DEFAULT 1,
 
-  UNIQUE (lang, sentence)
+  UNIQUE (sentence, lang)
 );
 
--- earlier, to speed up intermediate pruning
-CREATE INDEX sentences_lang_idx ON sentences (lang);
-CREATE INDEX sentences_occurrences_idx ON sentences (occurrences);
+-- speed up intermediate pruning
+CREATE INDEX sentences_lang_occurrences_idx ON sentences (lang, occurrences);
 
 
 CREATE TABLE links(
@@ -113,8 +112,7 @@ CREATE TABLE links(
       ON UPDATE CASCADE
       ON DELETE CASCADE
 ) WITHOUT ROWID;
--- earlier, to speed up intermediate pruning
-CREATE INDEX links_sentenceid_idx ON links (sentenceid);
+-- speed up intermediate sentence pruning (links will be deleted using foreign key)
 CREATE INDEX links_translationid_idx ON links (translationid);
 
 EOF
@@ -162,39 +160,35 @@ PRAGMA mmap_size = 30000000000;
 CREATE TEMP TABLE rawpairs(
   sentence_a TEXT NOT NULL,
   sentence_b TEXT NOT NULL
-) ;
+);
 
 .mode ascii
 .separator "\t" "\n"
 .import /dev/stdin rawpairs
 
-SELECT "adding laguage tags...";
-ALTER TABLE temp.rawpairs ADD COLUMN lang_a TEXT NOT NULL DEFAULT '${LANGA3}';
-ALTER TABLE temp.rawpairs ADD COLUMN lang_b TEXT NOT NULL DEFAULT '${LANGB3}';
-
 SELECT "collecting sentences...";
 INSERT INTO sentences (lang, sentence)
-    SELECT lang_a, sentence_a FROM temp.rawpairs WHERE true -- without WHERE true: syntax error -> sqlite bug?
+    SELECT '${LANGA3}', sentence_a FROM temp.rawpairs WHERE true -- without WHERE true: syntax error -> sqlite bug?
     ON CONFLICT (lang, sentence) DO UPDATE SET occurrences=occurrences+1;
 
 INSERT INTO sentences (lang, sentence)
-    SELECT lang_b, sentence_b FROM temp.rawpairs WHERE true
+    SELECT '${LANGB3}', sentence_b FROM temp.rawpairs WHERE true
     ON CONFLICT (lang, sentence) DO UPDATE SET occurrences=occurrences+1;
 
 SELECT "collecting links...";
 INSERT INTO links (sentenceid, translationid)
     SELECT sa.sentenceid, sb.sentenceid
     FROM temp.rawpairs
-    JOIN sentences sa ON sa.sentence = sentence_a AND sa.lang = lang_a
-    JOIN sentences sb ON sb.sentence = sentence_b AND sb.lang = lang_b
+    JOIN sentences sa ON sa.sentence = sentence_a AND sa.lang = '${LANGA3}'
+    JOIN sentences sb ON sb.sentence = sentence_b AND sb.lang = '${LANGB3}'
     ON CONFLICT (sentenceid, translationid) DO UPDATE SET occurrences=occurrences+1;
 
 SELECT "adding backlinks...";
 INSERT INTO links (sentenceid, translationid)
     SELECT sb.sentenceid, sa.sentenceid
     FROM temp.rawpairs
-    JOIN sentences sa ON sa.sentence = sentence_a AND sa.lang = lang_a
-    JOIN sentences sb ON sb.sentence = sentence_b AND sb.lang = lang_b
+    JOIN sentences sa ON sa.sentence = sentence_a AND sa.lang = '${LANGA3}'
+    JOIN sentences sb ON sb.sentence = sentence_b AND sb.lang = '${LANGB3}'
     ON CONFLICT (sentenceid, translationid) DO UPDATE SET occurrences=occurrences+1;
 EOF
 )
@@ -229,15 +223,7 @@ PRAGMA mmap_size = 30000000000;
 SELECT "pruning low occurrence sentences in $LANGA (< $MIN_OCCURRENCES)...";
 PRAGMA foreign_keys = ON;
 DELETE FROM sentences WHERE lang = '$LANGA3' AND occurrences < $MIN_OCCURRENCES;
-
-.output /dev/null
-PRAGMA temp_store = FILE; -- for vacuum
-.output
-.headers off
-SELECT "optimize...";
-PRAGMA optimize;
-SELECT "vacuum...";
-VACUUM;
+SELECT '-' || changes(*) || ' of ' || ((SELECT count(*) from sentences) + changes(*));
 EOF
 }
 
@@ -254,15 +240,8 @@ PRAGMA synchronous = OFF;
 PRAGMA temp_store = MEMORY;
 PRAGMA cache_size=10000;
 PRAGMA mmap_size = 30000000000;
+PRAGMA automatic_index = false;
 .output
-
-SELECT "creating indexes...";
--- CREATE INDEX sentences_sentence_idx ON sentences (sentence);
--- CREATE INDEX links_occurrences_idx ON links (occurrences);
-
--- SELECT "pruning low occurrence sentences (< $MIN_OCCURRENCES)...";
--- PRAGMA foreign_keys = ON;
--- DELETE FROM sentences WHERE occurrences < $MIN_OCCURRENCES;
 
 SELECT "precomputing sentence degrees...";
 ALTER TABLE sentences ADD COLUMN degree INTEGER NOT NULL DEFAULT 1;
@@ -284,7 +263,6 @@ SELECT l.sentenceid, t.lang, sum(l.occurrences)
 FROM links l
 JOIN sentences t ON t.sentenceid = l.translationid
 GROUP BY l.sentenceid, t.lang;
-CREATE INDEX lang_degree_sentenceid_lang_idx ON lang_degree (sentenceid, lang);
 
 SELECT "precomputing second-level sentence degrees per language...";
 create TABLE lang_degree2(
@@ -304,7 +282,12 @@ FROM links l
 JOIN lang_degree d2 ON d2.sentenceid = l.translationid
 GROUP BY l.sentenceid, d2.lang
 ;
-CREATE INDEX lang_degree2_sentenceid_lang_idx ON lang_degree2 (sentenceid, lang);
+
+SELECT "dropping temporary indexes...";
+DROP INDEX sentences_lang_occurrences_idx;
+DROP INDEX links_translationid_idx;
+SELECT "creating indexes...";
+CREATE INDEX sentences_lang_sentenceid_idx ON sentences(lang, sentenceid DESC); -- suggested by .expert
 
 
 CREATE VIEW direct_translations AS
@@ -331,13 +314,11 @@ CREATE VIEW indirect_translations_ungrouped AS
     JOIN sentences sp  ON sp.sentenceid  = l.l1_translationid
     JOIN sentences st ON st.sentenceid = l.l2_translationid
     JOIN lang_degree2 d2 ON d2.sentenceid = sourceid AND d2.lang = st.lang;
+EOF
 
-
-
-
-
+cat << EOF | sqlite3 -init "" "$SQLITEDB"
 .headers off
-SELECT "optimize...";
+SELECT "analyze & optimize...";
 ANALYZE;
 PRAGMA optimize;
 SELECT "vacuum...";
