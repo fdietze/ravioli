@@ -1,0 +1,16 @@
+name: ravioli
+syncFilters:
+  - exclude:
+    - .git/*
+    - .idea/*
+    - '*/__pycache__/*'
+
+containers:
+  - projectDir: /workspace/project
+    file: 
+    # image: tensorflow/tensorflow:latest-gpu-py3-jupyter
+    env:
+      PYTHONPATH: /workspace/project
+    volumeMounts:
+      - name: workspace
+        mountPath: /workspace
