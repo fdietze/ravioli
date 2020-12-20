@@ -60,11 +60,9 @@ CREATE TABLE sentences(
 .separator "\t" "\n"
 .import '$TRANS_OUT/sentences.tsv' sentences
 
-CREATE INDEX sentences_lang_idx ON sentences (lang);
-CREATE INDEX sentences_sentence_idx ON sentences (sentence);
+CREATE INDEX sentences_lang_idx ON sentences (lang, sentenceid);
 CREATE INDEX sentences_sentence_lang_idx ON sentences (sentence,lang);
 CREATE INDEX sentences_sentenceid_lang_idx ON sentences (sentenceid,lang);
-CREATE INDEX sentences_username_idx ON sentences (username);
 EOF
 
 
@@ -93,7 +91,6 @@ CREATE TABLE links(
 .import '$TRANS_OUT/links.tsv' links
 
 ALTER TABLE links ADD COLUMN occurrences INTEGER NOT NULL DEFAULT 1;
-CREATE INDEX links_sentenceid_idx ON links (sentenceid);
 CREATE INDEX links_translationid_idx ON links (translationid);
 EOF
 
@@ -118,8 +115,8 @@ CREATE TABLE tags(
 .separator "\t" "\n"
 .import '$TRANS_OUT/tags.tsv' tags
 
-CREATE INDEX tags_sentenceid_idx ON tags (sentenceid);
-CREATE INDEX tags_tag_idx ON tags (tag);
+-- CREATE INDEX tags_sentenceid_idx ON tags (sentenceid);
+-- CREATE INDEX tags_tag_idx ON tags (tag);
 EOF
 
 
@@ -144,9 +141,9 @@ CREATE TABLE sentences_with_audio(
 .separator "\t" "\n"
 .import '$TRANS_OUT/sentences_with_audio.tsv' sentences_with_audio
 
-CREATE INDEX sentences_with_audio_sentenceid_idx ON sentences_with_audio (sentenceid);
-CREATE INDEX sentences_with_audio_username_idx ON sentences_with_audio (username);
-CREATE INDEX sentences_with_audio_license_idx ON sentences_with_audio (license);
+-- CREATE INDEX sentences_with_audio_sentenceid_idx ON sentences_with_audio (sentenceid);
+-- CREATE INDEX sentences_with_audio_username_idx ON sentences_with_audio (username);
+-- CREATE INDEX sentences_with_audio_license_idx ON sentences_with_audio (license);
 EOF
 
 
@@ -166,9 +163,9 @@ CREATE TABLE user_languages(
 .separator "\t" "\n"
 .import '$TRANS_OUT/user_languages.tsv' user_languages
 
-CREATE INDEX user_languages_lang_idx ON user_languages (lang);
-CREATE INDEX user_languages_skill_level_idx ON user_languages (skill_level);
-CREATE INDEX user_languages_username_idx ON user_languages (username);
+-- CREATE INDEX user_languages_lang_idx ON user_languages (lang);
+-- CREATE INDEX user_languages_skill_level_idx ON user_languages (skill_level);
+-- CREATE INDEX user_languages_username_idx ON user_languages (username);
 EOF
 
 
