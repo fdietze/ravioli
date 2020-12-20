@@ -41,6 +41,9 @@
 
     const lang = new ReplaySubject<string>(1);
     const nativeLang = new ReplaySubject<string>(1);
+    lang.next("fra");
+    nativeLang.next("deu");
+
     const available_languages: Array<{
         lang: string;
         translations: Array<string>;
@@ -259,22 +262,22 @@
     <div class="h-screen flex justify-center">
         <div class="p-10 flex" style="width: 600px; min-width: 300px;">
             <div class="w-full">
-            {#if $lang === undefined}
-                <h1>Which language do you want to learn?</h1>
-                {#each available_languages as l}
-                    <button
-                        on:click={() => lang.next(l.lang)}
-                        class="bg-indigo-500 text-white font-bold rounded py-2 px-4 mr-1">{l.lang}</button>
-                {/each}
-            {:else if $nativeLang === undefined}
-                <div>Selected: <b>{$lang}</b></div>
-                <h1>What is your native language?</h1>
-                {#each available_languages.find((l) => l.lang == $lang).translations as t}
-                    <button
-                        on:click={() => nativeLang.next(t)}
-                        class="bg-green-500 text-white font-bold rounded py-2 px-4 mr-1">{t}</button>
-                {/each}
-            {:else}
+                {#if $lang === undefined}
+                    <h1>Which language do you want to learn?</h1>
+                    {#each available_languages as l}
+                        <button
+                            on:click={() => lang.next(l.lang)}
+                            class="bg-indigo-500 text-white font-bold rounded py-2 px-4 mr-1">{l.lang}</button>
+                    {/each}
+                {:else if $nativeLang === undefined}
+                    <div>Selected: <b>{$lang}</b></div>
+                    <h1>What is your native language?</h1>
+                    {#each available_languages.find((l) => l.lang == $lang).translations as t}
+                        <button
+                            on:click={() => nativeLang.next(t)}
+                            class="bg-green-500 text-white font-bold rounded py-2 px-4 mr-1">{t}</button>
+                    {/each}
+                {:else}
                     {#each $currentTranslations as t}
                         <div
                             class="text-2xl"
@@ -282,73 +285,73 @@
                             {t.translation}
                             ({Math.round(t.probability * 100)}%)
                         </div>
-                {/each}
-                {#if showDiff}
+                    {/each}
+                    {#if showDiff}
                         <div class="text-xl">
-                        <SentenceDiff
-                            original={$currentSentence}
-                            userInput={$userInput} />
-                    </div>
+                            <SentenceDiff
+                                original={$currentSentence}
+                                userInput={$userInput} />
+                        </div>
                         {#if $userInput != ''}
                             <div class="text-xl">{$currentSentence}</div>
                         {/if}
-                    <button
-                        on:click={() => pressedEnter.next()}
-                        class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Next</button>
-                {:else}
-                    <div class="flex">
-                        <input
-                            bind:value={$userInput}
-                            bind:this={inputField}
-                            type="text"
-                            class="border rounded w-full py-2 px-3 leading-tight outline-none focus:shadow-outline"
-                                placeholder="Type translation ({$lang})" />
                         <button
                             on:click={() => pressedEnter.next()}
-                            class="ml-1 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Check</button>
-                    </div>
-                {/if}
-                {#if !showDiff}
+                            class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Next</button>
+                    {:else}
+                        <div class="flex">
+                            <input
+                                bind:value={$userInput}
+                                bind:this={inputField}
+                                type="text"
+                                class="border rounded w-full py-2 px-3 leading-tight outline-none focus:shadow-outline"
+                                placeholder="Type translation ({$lang})" />
+                            <button
+                                on:click={() => pressedEnter.next()}
+                                class="ml-1 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Check</button>
+                        </div>
+                    {/if}
+                    {#if !showDiff}
                         {#if $minProficiency <= 2}
-                    <div
-                        class="mt-2 h-3 relative max-w-xl rounded-full overflow-hidden">
-                        <div class="w-full h-full bg-gray-200 absolute" />
                         <div
-                            class="h-full bg-green-500 absolute"
-                            style="width:{$diffProgress * 100}%" />
-                    </div>
+                            class="mt-2 h-3 relative max-w-xl rounded-full overflow-hidden">
+                            <div class="w-full h-full bg-gray-200 absolute" />
+                            <div
+                                class="h-full bg-green-500 absolute"
+                                style="width:{$diffProgress * 100}%" />
+                        </div>
                         {/if}
                         {#if $minProficiency <= 1}
-                    <div
-                        class="mt-2 h-3 relative max-w-xl rounded-full overflow-hidden">
-                        <div class="w-full h-full bg-gray-200 absolute" />
                         <div
-                            class="h-full bg-red-500 absolute"
-                            style="width:{$errorProgress * 100}%" />
-                    </div>
+                            class="mt-2 h-3 relative max-w-xl rounded-full overflow-hidden">
+                            <div class="w-full h-full bg-gray-200 absolute" />
+                            <div
+                                class="h-full bg-red-500 absolute"
+                                style="width:{$errorProgress * 100}%" />
+                        </div>
                         {/if}
                         {#if $minProficiency <= 0}
-                    {#each $proposedWords as word}
-                        <button
-                            on:click={async () => {
-                                userInput.next(userInput.getValue() + word);
-                                await tick();
-                                inputField?.focus();
-                            }}
-                            class="mr-1 mt-2 hover:bg-gray-200 py-2 px-4 border rounded focus:outline-none focus:shadow-outline text-white hover:text-black">{word}</button>
-                    {/each}
-                {/if}
+                            {#each $proposedWords as word}
+                                <button
+                                    on:click={async () => {
+                                        userInput.next(userInput.getValue() + word);
+                                        await tick();
+                                        inputField?.focus();
+                                    }}
+                                    class="mr-1 mt-2 hover:bg-gray-200 py-2 px-4 border rounded focus:outline-none focus:shadow-outline text-white hover:text-black">{word}</button>
+                            {/each}
+                        {/if}
                     {/if}
 
-                <!--
+                    <!--
                     {#each $matchedPatterns as pattern}
-                <div style={pattern.matched ? 'color: green' : ''}>
-                    {pattern.pattern}
-                </div>
-            {/each}
-            //-->
-            {/if}
-                </div>
+                        <div style={pattern.matched ? 'color: green' : ''}>
+                            {pattern.pattern}
+                        </div>
+                    {/each}
+                    //-->
+                {/if}
+            </div>
             <PatternOverview data={$patternOverview} />
         </div>
     </div>
