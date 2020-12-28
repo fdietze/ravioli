@@ -12,7 +12,7 @@
         {#each data as pattern (pattern.rank)}
             <div
                 title={pattern.pattern}
-                class="h-1"
+                class="h-4"
                 class:bg-green-500={pattern.proficiency >= 0}
                 class:bg-red-500={pattern.proficiency < 0}
                 class:bg-opacity-0={pattern.proficiency == 0}
