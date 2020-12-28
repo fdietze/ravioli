@@ -5,7 +5,7 @@ const translateGoogleAPI = setCORS("http://cors-anywhere.herokuapp.com/");
 
 export function translateSentenceFromDb(db: SqlJs.Database, sentenceId: string): Array<{translation: string, probability: number, opacity: number}> {
   console.log(`translateSentenceFromDb(${sentenceId})`);
-  const res = db.exec(`SELECT translation, probability, probability / (SELECT MAX(probability) FROM translations t WHERE t.sentenceid = ${sentenceId}) opacity FROM translations t WHERE t.sentenceid = ${sentenceId} ORDER BY probability DESC`);
+  const res = db.exec(`SELECT translation, probability, probability / (SELECT MAX(probability) FROM translations t WHERE t.sentenceid = ${sentenceId}) opacity FROM translations t WHERE t.sentenceid = ${sentenceId} ORDER BY probability DESC LIMIT 8`);
   if (res.length == 0) return [];
   return res[0].values.map(a => {return {translation: a[0].toString(), probability: a[1] as number, opacity: a[2] as number}});
 }
