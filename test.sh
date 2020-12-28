@@ -2,6 +2,19 @@
 set -Eeuo pipefail # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/#:~:text=set%20%2Du,is%20often%20highly%20desirable%20behavior.
 
 SQLITEDB=$1
+shift 1
+
+EXPLAIN=false
+GOOD=false
+while getopts :eg opt
+do
+    case "${opt}" in
+        e) EXPLAIN=true;;
+        g) GOOD=true;;
+        *)
+    esac
+done
+
 
 q() { sqlite3 "$SQLITEDB" -init "" "$@"; }
 
@@ -17,6 +30,7 @@ GAP=4
 SELECT_NEXT_PATTERNS="SELECT p.pattern FROM patterns p WHERE next_test <= (SELECT time FROM tick LIMIT 1) ORDER BY p.score ASC LIMIT ${PATTERN_LIMIT}"
 SELECT_POTENTIAL_SENTENCES="SELECT r.sentenceid, COUNT(DISTINCT p.pattern) as matched_patterns FROM reverseindex r JOIN sentences s ON s.sentenceid = r.sentenceid JOIN patterns p ON r.pattern = p.pattern WHERE p.pattern IN next_patterns GROUP BY r.sentenceid ORDER BY s.coverage DESC LIMIT ${POTENTIAL_SENTENCE_LIMIT}"
 
+if $EXPLAIN; then
 # see what will be next and why
 cat << EOF | sqlite3 "$SQLITEDB"
 .headers on
@@ -46,9 +60,8 @@ FROM (
 GROUP BY sentenceid 
 ORDER BY score ASC 
 LIMIT 20;
-
-
 EOF
+fi
 
 
 sentenceid=$(cat << EOF | sqlite3 -init "" "$SQLITEDB"
@@ -75,8 +88,6 @@ SELECT sentenceid FROM (
 EOF
 )
 
-echo $sentenceid
-
 # if no more pattern needs to be trained, advance in time
 if [ -z "$sentenceid" ]; then
     q "UPDATE tick SET time = time + 1"
@@ -95,6 +106,8 @@ time=$(q "SELECT time from tick LIMIT 1")
 
 echo "$time: $sentence"
 
+
+if $GOOD; then
 IFS=$'\n'
 patterns=(`q "SELECT p.rank from reverseindex r JOIN patterns p ON r.pattern = p.pattern  WHERE sentenceid = $sentenceid"`)
 
@@ -104,5 +117,6 @@ for rank in "${patterns[@]}"; do
 done
 
 q "UPDATE tick SET time = time + 1"
+fi
 
 
