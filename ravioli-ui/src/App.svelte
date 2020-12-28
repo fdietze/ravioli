@@ -278,6 +278,7 @@
                             class="bg-green-500 text-white font-bold rounded py-2 px-4 mr-1">{t}</button>
                     {/each}
                 {:else}
+                    <h1 class="text-xs">Which sentence translates to:</h1>
                     {#each $currentTranslations as t}
                         <div
                             class="text-2xl"
