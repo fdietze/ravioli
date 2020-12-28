@@ -181,6 +181,7 @@
     const currentTranslations: Observable<Array<{
         translation: string;
         probability: number;
+        opacity: number;
     }>> = combineLatest([translationDb, currentSentenceId]).pipe(
         map(([translationDb, sentenceId]) =>
             translateSentenceFromDb(translationDb, sentenceId)
@@ -282,7 +283,7 @@
                     {#each $currentTranslations as t}
                         <div
                             class="text-2xl"
-                            style={`opacity: ${t.probability}`}>
+                            style={`opacity: ${t.opacity}`}>
                             {t.translation}
                             ({Math.round(t.probability * 100)}%)
                         </div>
