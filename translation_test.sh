@@ -39,9 +39,13 @@ pragma threads = 4;
 
 
 
-SELECT sentence, probability, cumu
+.headers off
+SELECT "direct translations:";
+.headers on
+
+SELECT sentence, probability, cumulative
 FROM (
-    SELECT sentence, probability, SUM(probability) OVER (ROWS UNBOUNDED PRECEDING) as cumu
+    SELECT sentence, probability, SUM(probability) OVER (ROWS UNBOUNDED PRECEDING) as cumulative
     FROM (
         SELECT t.sentence, probability
         FROM sentences s
@@ -51,14 +55,14 @@ FROM (
         ORDER BY probability DESC
     )
 )
-WHERE cumu - probability <= $MIN_COVERAGE
+WHERE cumulative - probability <= $MIN_COVERAGE
 ;
 
 
 
 .headers off
 SELECT "";
-SELECT "indirect translations...";
+SELECT "indirect translations:";
 .headers on
 -- #    /-- X --\
 -- #  S --- Y --- ST
@@ -67,9 +71,9 @@ SELECT "indirect translations...";
 
 
 -- EXPLAIN QUERY PLAN
-SELECT sentence, prob, cumu
+SELECT sentence, prob, cumulative
 FROM (
-    SELECT sentenceid, sentence, prob, SUM(prob) OVER (ROWS UNBOUNDED PRECEDING) as cumu
+    SELECT sentenceid, sentence, prob, SUM(prob) OVER (ROWS UNBOUNDED PRECEDING) as cumulative
     FROM (
         SELECT ts.sentenceid, ts.sentence, sum(probability) as prob
         FROM sentences s
@@ -82,7 +86,7 @@ FROM (
         ORDER BY prob DESC
     )
 )
-WHERE cumu - prob <= $MIN_COVERAGE
+WHERE cumulative - prob <= $MIN_COVERAGE
 
 
 ;
