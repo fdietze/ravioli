@@ -56,11 +56,10 @@ fi
 
 if [ ! -s "$CORPUS_OUT/tokens.txt" ]; then
     echo "Tokenization...."
-    (
-    pv --line-mode -s "$(wc -l "$CORPUS_OUT/sentences.txt" | cut -f1 -d " ")" "$CORPUS_OUT/sentences.txt" |
-        # ./tokenize_stanza.py "$LANG2" |
+    cat "$CORPUS_OUT/sentences.txt" |
+        sacremoses --quiet --processes 8 -l $LANG2 tokenize --xml-escape |
+        # pv --line-mode -s "$(wc -l "$CORPUS_OUT/sentences.txt" | cut -f1 -d " ")" |
         cat > "$CORPUS_OUT/tokens.txt"
-            ) || true # piping through python makes problems
 fi
 
 

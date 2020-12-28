@@ -41,8 +41,8 @@ CREATE INDEX rawsentences_sentence_idx ON rawsentences (sentence);
 SELECT "storing duplicate sentences only once with their coverage...";
 CREATE TABLE sentences(
   sentenceid INTEGER NOT NULL PRIMARY KEY,
-  sentence TEXT NOT NULL,
-  tokenized TEXT NOT NULL UNIQUE,
+  sentence TEXT NOT NULL UNIQUE,
+  tokenized TEXT NOT NULL,
   coverage REAL NOT NULL
 );
 INSERT INTO sentences (sentenceid, sentence, tokenized, coverage)
