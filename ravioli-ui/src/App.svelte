@@ -283,7 +283,7 @@
                     {#each $currentTranslations as t}
                         <div
                             class="text-2xl"
-                            style={`opacity: ${t.opacity}`}>
+                            style={`opacity: ${Math.max(t.opacity, 0.15)}`}>
                             {t.translation}
                             ({Math.round(t.probability * 100)}%)
                         </div>
