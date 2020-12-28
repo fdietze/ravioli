@@ -9,14 +9,14 @@ export async function initSQL() {
   const SQL = await initSqlJs({
     // Required to load the wasm binary asynchronously. Of course, you can host it wherever you want
     // You can omit locateFile completely when running in node
-    locateFile: (file) => `https://sql.js.org/dist/${file}`,
+    locateFile: (file) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.4.0/dist/${file}`,
   });
 
   return SQL;
 }
 
 let prepared_statements = {};
-export function queryWithParams(db: SqlJs.Database, query:string, params:object) {
+export function queryWithParams(db: SqlJs.Database, query: string, params: object) {
   try {
     return prepared_statements[query].getAsObject(params);
   } catch (err) {
