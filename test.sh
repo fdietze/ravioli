@@ -6,9 +6,9 @@ SQLITEDB=$1
 q() { sqlite3 "$SQLITEDB" -init "" "$@"; }
 
 
-SENTENCESCOREFN='((1/s_coverage) + AVG(1/p_coverage*(p_proficiency+1)*(p_proficiency+1)))/(matched_patterns*matched_patterns*matched_patterns)' # default proficiency is 0
-POTENTIAL_SENTENCE_LIMIT=1000;
-PATTERN_LIMIT=1;
+SENTENCESCOREFN='((1/s_coverage) + AVG(1/p_coverage*(p_proficiency+1)*(p_proficiency+1)))/matched_patterns' # default proficiency is 0
+POTENTIAL_SENTENCE_LIMIT=100;
+PATTERN_LIMIT=2;
 
 GAP=4
 # TODO: MAXGAP = log(10000)/log($GAP)

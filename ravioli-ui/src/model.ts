@@ -9,7 +9,7 @@ export function getSentence(db: SqlJs.Database, sentenceId: string): string {
   return res[0].values[0][0].toString();
 }
 
-export function getSentencePatterns(db: SqlJs.Database, sentenceId: string): Array<{pattern:string, proficiency:number}> {
+export function getSentencePatterns(db: SqlJs.Database, sentenceId: string): Array<{pattern: string, proficiency: number}> {
   console.log(`getSentencePatterns(${sentenceId})`);
   const res = db.exec(
     `SELECT p.pattern, p.proficiency from reverseindex r JOIN patterns p ON r.pattern = p.pattern  WHERE sentenceid = ${sentenceId}`
@@ -19,12 +19,12 @@ export function getSentencePatterns(db: SqlJs.Database, sentenceId: string): Arr
 
 export function getNextSentenceId(db: SqlJs.Database): string {
   console.log(`getNextSentenceId()`);
-  const SENTENCESCOREFN='((1/s_coverage) + AVG(1/p_coverage*(p_proficiency+1)*(p_proficiency+1)))/(matched_patterns*matched_patterns*matched_patterns)' // default proficiency is 0
-  const POTENTIAL_SENTENCE_LIMIT = 50;
-  const PATTERN_LIMIT = 3;
-  
-  const SELECT_NEXT_PATTERNS=`SELECT p.pattern FROM patterns p WHERE next_test <= (SELECT time FROM tick LIMIT 1) ORDER BY p.score ASC LIMIT ${PATTERN_LIMIT}`
-  const SELECT_POTENTIAL_SENTENCES=`SELECT r.sentenceid, COUNT(DISTINCT p.pattern) as matched_patterns FROM reverseindex r JOIN sentences s ON s.sentenceid = r.sentenceid JOIN patterns p ON r.pattern = p.pattern WHERE p.pattern IN next_patterns GROUP BY r.sentenceid ORDER BY s.coverage DESC LIMIT ${POTENTIAL_SENTENCE_LIMIT}`
+  const SENTENCESCOREFN = '((1/s_coverage) + AVG(1/p_coverage*(p_proficiency+1)*(p_proficiency+1)))/matched_patterns' // default proficiency is 0
+  const POTENTIAL_SENTENCE_LIMIT = 100;
+  const PATTERN_LIMIT = 2;
+
+  const SELECT_NEXT_PATTERNS = `SELECT p.pattern FROM patterns p WHERE next_test <= (SELECT time FROM tick LIMIT 1) ORDER BY p.score ASC LIMIT ${PATTERN_LIMIT}`
+  const SELECT_POTENTIAL_SENTENCES = `SELECT r.sentenceid, COUNT(DISTINCT p.pattern) as matched_patterns FROM reverseindex r JOIN sentences s ON s.sentenceid = r.sentenceid JOIN patterns p ON r.pattern = p.pattern WHERE p.pattern IN next_patterns GROUP BY r.sentenceid ORDER BY s.coverage DESC LIMIT ${POTENTIAL_SENTENCE_LIMIT}`
 
   const query = `
 WITH
@@ -88,11 +88,11 @@ export function setLearnedPattern(db: SqlJs.Database, pattern: string, correct: 
   }
 }
 
-export function getPatternOverview(db: SqlJs.Database): Array<{pattern:string, rank:number, proficiency:number}> {
+export function getPatternOverview(db: SqlJs.Database): Array<{pattern: string, rank: number, proficiency: number}> {
   const res = db.exec(
     `select rank, pattern, proficiency from patterns where rank <= (select count(*) from patterns where proficiency > 0) - (select count(*) from patterns where proficiency < 0)`
   );
 
-  if(res.length == 0) return [];
+  if (res.length == 0) return [];
   return res[0].values.map((val) => ({rank: val[0] as number, pattern: val[1] as string, proficiency: val[2] as number}));
 }
