@@ -278,20 +278,31 @@
         <div class="p-10 flex" style="width: 600px; min-width: 300px;">
             <div class="w-full">
                 {#if $lang === undefined}
-                    <h1>Which language do you want to learn?</h1>
+                    <h1 class="mb-4 text-center">
+                        Which language do you want to learn?
+                    </h1>
+                    <div class="flex justify-center flex-wrap">
                     {#each available_languages as l}
                         <button
                             on:click={() => lang.next(l.lang)}
-                            class="bg-indigo-500 text-white font-bold rounded py-2 px-4 mr-1">{l.lang}</button>
+                                class="bg-indigo-500 text-white font-bold rounded py-2 px-4 mr-1 mb-1">{l.lang}</button>
                     {/each}
+                    </div>
                 {:else if $nativeLang === undefined}
-                    <div>Selected: <b>{$lang}</b></div>
-                    <h1>What is your native language?</h1>
+                    <div class="text-center">
+                        You want to learn:
+                        <b>{$lang}</b>
+                    </div>
+                    <h1 class="mb-4 text-center">
+                        What is your native language?
+                    </h1>
+                    <div class="flex justify-center flex-wrap">
                     {#each available_languages.find((l) => l.lang == $lang).translations as t}
                         <button
                             on:click={() => nativeLang.next(t)}
-                            class="bg-green-500 text-white font-bold rounded py-2 px-4 mr-1">{t}</button>
+                                class="bg-green-500 text-white font-bold rounded py-2 px-4 mr-1 mb-1">{t}</button>
                     {/each}
+                    </div>
                 {:else}
                     <h1 class="text-xs">Which sentence translates to:</h1>
                     {#each $currentTranslations as t}
@@ -375,7 +386,9 @@
                     //-->
                 {/if}
             </div>
+            {#if $lang !== undefined && $nativeLang !== undefined}
             <PatternOverview data={$patternOverview} />
         </div>
+            {/if}
     </div>
 </main>
