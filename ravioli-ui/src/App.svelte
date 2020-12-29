@@ -347,19 +347,21 @@
                         {#if $minProficiency <= 2}
                         <div
                             class="mt-2 h-3 relative max-w-xl rounded-full overflow-hidden">
-                            <div class="w-full h-full bg-gray-200 absolute" />
+                                <div
+                                    class="w-full h-full bg-gray-200 absolute" />
                             <div
                                 class="h-full bg-green-500 absolute"
-                                style="width:{$diffProgress * 100}%" />
+                                    style="width:{$diffProgress * 100}%; transition: width 0.5s;" />
                         </div>
                         {/if}
                         {#if $minProficiency <= 1}
                         <div
                             class="mt-2 h-3 relative max-w-xl rounded-full overflow-hidden">
-                            <div class="w-full h-full bg-gray-200 absolute" />
+                                <div
+                                    class="w-full h-full bg-gray-200 absolute" />
                             <div
                                 class="h-full bg-red-500 absolute"
-                                style="width:{$errorProgress * 100}%" />
+                                    style="width:{$errorProgress * 100}%; transition: width 0.5s;" />
                         </div>
                         {/if}
                         {#if $minProficiency <= 0}
