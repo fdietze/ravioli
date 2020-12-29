@@ -394,8 +394,12 @@
                 {/if}
             </div>
             {#if $lang !== undefined && $nativeLang !== undefined}
+                <div class="ml-2 w-8 flex flex-col">
+                    <button
+                        class="bg-gray-200 hover:bg-gray-300 text-black text-xs px-1 py-1 rounded focus:outline-none">{$lang}</button>
             <PatternOverview data={$patternOverview} />
         </div>
             {/if}
+    </div>
     </div>
 </main>
