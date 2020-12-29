@@ -57,13 +57,14 @@ export async function saveExcerciseResult(
   SQL: SqlJs.SqlJsStatic,
   modelDb: SqlJs.Database,
   lang: string,
-  matchedPatterns: Array<{pattern: string; matched: boolean}>
+  matchedPatterns: Array<{pattern: string; matched: boolean}>,
+  neededHints: boolean,
 ): Promise<SqlJs.Database> {
   for (const matchedPattern of matchedPatterns) {
     setLearnedPattern(
       modelDb,
       matchedPattern.pattern,
-      matchedPattern.matched
+      matchedPattern.matched ? (neededHints ? 1 : 2) : -1
     );
   }
   setNextTick(modelDb);
@@ -71,19 +72,20 @@ export async function saveExcerciseResult(
 }
 
 
-export function setLearnedPattern(db: SqlJs.Database, pattern: string, correct: boolean) {
+export function setLearnedPattern(db: SqlJs.Database, pattern: string, delta: number) {
+  console.log("pattern proficiency: ", pattern, delta);
   const GAP = 4;
-  if (correct) {
+  if (delta > 0) {
     queryWithParams(
       db,
-      `UPDATE patterns SET proficiency = proficiency + 1, next_test = (SELECT time from tick LIMIT 1) + power(${GAP}, max(0, min(8, proficiency+2))) WHERE pattern = :pattern`,
-      {":pattern": pattern}
+      `UPDATE patterns SET proficiency = proficiency + :delta, next_test = (SELECT time from tick LIMIT 1) + power(${GAP}, max(0, min(8, proficiency+2))) WHERE pattern = :pattern`,
+      {":pattern": pattern, ":delta": delta}
     );
-  } else {
+  } else if (delta < 0) {
     queryWithParams(
       db,
-      `UPDATE patterns SET proficiency = proficiency - 1, next_test = (SELECT time from tick LIMIT 1) + ${GAP} WHERE pattern = :pattern`,
-      {":pattern": pattern}
+      `UPDATE patterns SET proficiency = proficiency + :delta, next_test = (SELECT time from tick LIMIT 1) + ${GAP} WHERE pattern = :pattern`,
+      {":pattern": pattern, ":delta": delta}
     );
   }
 }

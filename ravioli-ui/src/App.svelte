@@ -52,6 +52,7 @@
         translations: Array<string>;
     }>; // will be filled at build time
     const userInput = new SvelteSubject("");
+    const neededHints = new SvelteSubject(false);
     let showDiff = false;
     let inputField: HTMLInputElement;
 
@@ -70,22 +71,30 @@
                     concat(
                         of(initialDb),
                         finishCurrentSentence.pipe(
-                            withLatestFrom(matchedPatterns),
-                            mergeScan((currentDb, [_, matchedPatterns]) => {
+                            withLatestFrom(matchedPatterns, neededHints),
+                            mergeScan(
+                                (
+                                    currentDb,
+                                    [_, matchedPatterns, neededHintsValue]
+                                ) => {
                                 userInput.next("");
+                                    neededHints.next(false);
                                 showDiff = false;
                                 const nextDb = from(
                                     saveExcerciseResult(
                                         SQL,
                                         currentDb,
                                         lang,
-                                        matchedPatterns
+                                            matchedPatterns,
+                                            neededHintsValue
                                     )
                                 );
                                 return nextDb;
-                            }, initialDb)
+                                },
+                                initialDb
                         )
                     )
+                )
                 )
             );
         }),
@@ -338,16 +347,23 @@
                         </div>
                         {/if}
                         {#if $minProficiency <= 0}
+                            {#if $neededHints}
                             {#each $proposedWords as word}
                                 <button
                                     on:click={async () => {
                                         userInput.next(userInput.getValue() + word);
-                                        await tick();
-                                        inputField?.focus();
                                     }}
-                                    class="mr-1 mt-2 hover:bg-gray-200 py-2 px-4 border rounded focus:outline-none focus:shadow-outline text-white hover:text-black">{word}</button>
+                                        class="mr-1 mt-2 bg-gray-200 hover:bg-gray-300 py-2 px-4 border rounded focus:outline-none text-black">{word}</button>
                             {/each}
+                            {:else}
+                                <button
+                                    on:click={async () => {
+                                        neededHints.next(true);
+                                    }}
+                                    class="mr-1 mt-2 bg-gray-200 hover:bg-gray-300 py-2 px-4 border rounded focus:outline-none text-black">Show
+                                    hints</button>
                         {/if}
+                    {/if}
                     {/if}
 
                     <!--
