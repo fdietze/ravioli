@@ -6,9 +6,12 @@ SQLITEDB=$1
 SENTENCES=$2
 PATTERNS=$3
 REVERSEINDEX=$4
+LANG3=$5
 
 MIN_SENTENCE_OCCURRENCES=4
 KEEP_SENTENCES_PER_PATTERN=10
+TRANSLATIONFILE="out/translations_opensub/translations.sqlite"
+
 PATTERNSCOREFN='2*(1/p.coverage) * 1/MAX(s.coverage)'
 
 rm -f "$SQLITEDB"
@@ -55,6 +58,16 @@ delete FROM sentences WHERE coverage < (CAST($MIN_SENTENCE_OCCURRENCES as real) 
 SELECT '  -' || changes(*);
 
 DROP TABLE rawsentences;
+
+
+SELECT "removing untranslatable sentences...";
+attach '$TRANSLATIONFILE' as tr;
+DELETE FROM sentences WHERE sentenceid IN
+    (SELECT s.sentenceid
+    FROM sentences s
+    LEFT OUTER JOIN tr.sentences t on s.sentence = t.sentence and t.lang = '$LANG3'
+    WHERE t.sentence IS NULL);
+SELECT '  -' || changes(*);
 
 
 SELECT "importing patterns...";

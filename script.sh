@@ -102,7 +102,7 @@ fi
 
 if [ ! -s "$DIR/${LANG}_model.sqlite" ]; then
 echo "Creating sqlite database"
-./import-data-sqlite.sh "$DIR/${LANG}_model.sqlite" "$DIR/sentences.tsv" "$DIR/tokens.patterns.tsv" "$DIR/tokens.reverse-index.tsv" || true
+./import-data-sqlite.sh "$DIR/${LANG}_model.sqlite" "$DIR/sentences.tsv" "$DIR/tokens.patterns.tsv" "$DIR/tokens.reverse-index.tsv" "$LANG" || true
 fi
 
 
