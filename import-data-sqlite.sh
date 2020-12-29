@@ -66,6 +66,20 @@ CREATE TABLE patterns(
 -- insert empty pattern to fulfill reverseindex foreign key constraint
 INSERT INTO "patterns"(rank,pattern,coverage) VALUES(999999999, '', 0.0);
 
+EOF
+
+
+
+# separate session to ignore foreign key errors
+cat << EOF | sqlite3 -init "" "$SQLITEDB" 2> /dev/null || true
+.output /dev/null
+PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = OFF;
+PRAGMA synchronous = OFF;
+PRAGMA temp_store = MEMORY;
+PRAGMA cache_size=10000;
+PRAGMA mmap_size = 30000000000;
+.output
 
 SELECT "importing reverseindex...";
 CREATE TABLE reverseindex(
@@ -83,20 +97,7 @@ CREATE TABLE reverseindex(
         ON UPDATE CASCADE
         ON DELETE CASCADE
 );
-EOF
 
-
-
-# separate session to ignore foreign key errors
-cat << EOF | sqlite3 -init "" "$SQLITEDB" 2> /dev/null || true
-.output /dev/null
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = OFF;
-PRAGMA synchronous = OFF;
-PRAGMA temp_store = MEMORY;
-PRAGMA cache_size=10000;
-PRAGMA mmap_size = 30000000000;
-.output
 .mode tabs
 .import '$REVERSEINDEX' reverseindex
 
