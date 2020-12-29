@@ -69,7 +69,7 @@ done
 if [ ! -s "$CORPUS_OUT/tokens.txt" ]; then
     echo "Tokenization...."
     cat "$CORPUS_OUT/sentences.txt" |
-        sacremoses --quiet --processes 8 -l $LANG2 tokenize --xml-escape |
+        sacremoses --quiet --processes 8 -l "$LANG2" tokenize --xml-escape |
         # pv --line-mode -s "$(wc -l "$CORPUS_OUT/sentences.txt" | cut -f1 -d " ")" |
         cat > "$CORPUS_OUT/tokens.txt"
 fi
