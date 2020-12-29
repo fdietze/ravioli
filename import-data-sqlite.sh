@@ -51,7 +51,9 @@ SELECT MIN(sentenceid) AS sentenceid, sentence, tokenized, CAST(COUNT(sentenceid
 CREATE INDEX sentences_coverage_idx ON sentences (coverage);
 
 SELECT "removing uncommon sentences (occurrence < $MIN_SENTENCE_OCCURRENCES)...";
-delete FROM sentences WHERE coverage < ($MIN_SENTENCE_OCCURRENCES / (SELECT COUNT(*) FROM rawsentences));
+delete FROM sentences WHERE coverage < (CAST($MIN_SENTENCE_OCCURRENCES as real) / (SELECT COUNT(*) FROM rawsentences));
+SELECT '  -' || changes(*);
+
 DROP TABLE rawsentences;
 
 
