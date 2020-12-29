@@ -15,7 +15,7 @@ export function getTranslations(SQL: SqlJs.SqlJsStatic, lang: string, translated
 }
 
 
-async function loadCachedDb(SQL: SqlJs.SqlJsStatic, key:string, url:string):Promise<SqlJs.Database> {
+async function loadCachedDb(SQL: SqlJs.SqlJsStatic, key: string, url: string): Promise<SqlJs.Database> {
   let blob: Uint8Array = await localForage.getItem(key);
   if (blob == null) {
     console.log(`fetching ${url}`)
