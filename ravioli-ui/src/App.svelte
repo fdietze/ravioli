@@ -304,38 +304,43 @@
                     {/each}
                     </div>
                 {:else}
-                    <h1 class="text-xs">Which sentence translates to:</h1>
+                    <div class="text-xs">Which sentence translates to:</div>
                     {#each $currentTranslations as t}
-                        <div
-                            class="text-2xl"
-                            style={`opacity: ${Math.max(t.opacity, 0.15)}`}>
+                        <div style={`opacity: ${Math.max(t.opacity, 0.15)}`}>
                             {t.translation}
                             ({Math.round(t.probability * 100)}%)
                         </div>
                     {/each}
                     {#if showDiff}
+                        <div class="mt-4 text-xs">Correct Answer:</div>
+                        <div class="text-xl">{$currentSentence}</div>
+                        {#if $userInput != ''}
                         <div class="text-xl">
                             <SentenceDiff
                                 original={$currentSentence}
                                 userInput={$userInput} />
                         </div>
-                        {#if $userInput != ''}
-                            <div class="text-xl">{$currentSentence}</div>
                         {/if}
                         <button
                             on:click={() => pressedEnter.next()}
-                            class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Next</button>
+                            class="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none">Next</button>
+                        (Or press ENTER)
                     {:else}
+                        <div class="mt-4 mb-1 text-xs">
+                            Type translation ({$lang}):
+                        </div>
                         <div class="flex">
                             <input
                                 bind:value={$userInput}
                                 bind:this={inputField}
                                 type="text"
                                 class="border rounded w-full py-2 px-3 leading-tight outline-none focus:shadow-outline"
-                                placeholder="Type translation ({$lang})" />
+                                autocomplete="off"
+                                autocorrect="off"
+                                spellcheck={false} />
                             <button
                                 on:click={() => pressedEnter.next()}
-                                class="ml-1 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Check</button>
+                                class="ml-1 bg-blue-500 hover:bg-blue-700 text-white text-sm font-bold px-2 rounded focus:outline-none">check</button>
                         </div>
                     {/if}
                     {#if !showDiff}
