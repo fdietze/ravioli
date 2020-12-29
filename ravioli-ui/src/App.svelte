@@ -275,7 +275,7 @@
     }} />
 <main>
     <div class="h-screen flex justify-center">
-        <div class="p-10 flex" style="width: 600px; min-width: 300px;">
+        <div class="p-5 lg:p-10 flex" style="width: 600px; min-width: 300px;">
             <div class="w-full">
                 {#if $lang === undefined}
                     <h1 class="mb-4 text-center">
