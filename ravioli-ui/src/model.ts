@@ -92,7 +92,10 @@ export function setLearnedPattern(db: SqlJs.Database, pattern: string, delta: nu
 
 export function getPatternOverview(db: SqlJs.Database): Array<{pattern: string, rank: number, proficiency: number}> {
   const res = db.exec(
-    `select rank, pattern, proficiency from patterns where rank <= (select count(*) from patterns where proficiency > 0) - (select count(*) from patterns where proficiency < 0)`
+    `select rank, pattern, proficiency
+    from patterns
+    where next_test > 0
+    order by score ASC`
   );
 
   if (res.length == 0) return [];
