@@ -26,7 +26,7 @@ SQLITEDB="$TRANS_OUT/translations$(printf "_%s" "${LANGUAGES[@]}")_${LIMIT}.sqli
 echo "${LANGUAGES[*]}"
 echo -e "Combinations: $combinations\n"
 
-# download-corpora $LANGUAGES
+download-corpora $LANGUAGES
 
 echo -e "\n"
 create-database-schema
