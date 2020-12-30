@@ -31,30 +31,29 @@ if [ ! -s "$OUT/${LANG}.txt" ]; then
 fi
 
 
-if [ ! -s "$CORPUS_OUT/sentences.txt" ]; then
-    echo "Normalizing unicode, cleaning up, extracting sentences..."
-    CLEANUP_COMMAND="./cleanup_default.sh"
-    if [ -f "cleanup_$LANG.sh" ]; then
-        CLEANUP_COMMAND="./cleanup_$LANG.sh"
-    fi
-    PRUNE_COMMAND="./prune_default.sh"
-    if [ -f "prune_$LANG.sh" ]; then
-        PRUNE_COMMAND="./prune_$LANG.sh"
-    fi
-    (
-    cat "$OUT/${LANG}.txt" |
-        ./normalize_unicode.sh |
-        $CLEANUP_COMMAND |
-        $PRUNE_COMMAND |
-        $CLEANUP_COMMAND | # cleanup twice is intentional (only once might not capture everything)
-        $PRUNE_COMMAND |
-        awk '{ if (length($0) < '"$MAX_SENTENCE_LENGTH"') print }' |
-        # ./sentences_stanza.py "$LANG2" |
-        pv --line-mode -s "$CORPUS_SENTENCE_LIMIT" |
-        head -"$CORPUS_SENTENCE_LIMIT" |
-        cat > "$CORPUS_OUT/sentences.txt"
-    ) || true # piping through python makes problems
+echo "Normalizing unicode, cleaning up, extracting sentences..."
+CLEANUP_COMMAND="./cleanup_default.sh"
+if [ -f "cleanup_$LANG.sh" ]; then
+    CLEANUP_COMMAND="./cleanup_$LANG.sh"
 fi
+PRUNE_COMMAND="./prune_default.sh"
+if [ -f "prune_$LANG.sh" ]; then
+    PRUNE_COMMAND="./prune_$LANG.sh"
+fi
+(
+cat "$OUT/${LANG}.txt" |
+    ./normalize_unicode.sh |
+    $CLEANUP_COMMAND |
+    $PRUNE_COMMAND |
+    $CLEANUP_COMMAND | # cleanup twice is intentional (only once might not capture everything)
+    $PRUNE_COMMAND |
+    awk '{ if (length($0) < '"$MAX_SENTENCE_LENGTH"') print }' |
+    # ./sentences_stanza.py "$LANG2" |
+    pv --line-mode -s "$CORPUS_SENTENCE_LIMIT" |
+    head -"$CORPUS_SENTENCE_LIMIT" |
+    cat > "$CORPUS_OUT/sentences.txt"
+) || true # piping through python makes problems
+
 
 (
 # https://www.regular-expressions.info/posixbrackets.html
@@ -68,31 +67,21 @@ done
 ) || true
 
 
-if [ ! -s "$CORPUS_OUT/tokens.txt" ]; then
-    echo "Tokenization...."
-    cat "$CORPUS_OUT/sentences.txt" |
-        sacremoses --quiet --processes 8 -l "$LANG2" tokenize --xml-escape |
-        # pv --line-mode -s "$(wc -l "$CORPUS_OUT/sentences.txt" | cut -f1 -d " ")" |
-        cat > "$CORPUS_OUT/tokens.txt"
-fi
+
+echo "Tokenization...."
+cat "$CORPUS_OUT/sentences.txt" |
+    sacremoses --quiet --processes 8 -l "$LANG2" tokenize --xml-escape |
+    # pv --line-mode -s "$(wc -l "$CORPUS_OUT/sentences.txt" | cut -f1 -d " ")" |
+    cat > "$CORPUS_OUT/tokens.txt"
 
 
-# TODO: list all non-alpha characters: awk -vFS="" '{for(i=1;i<=NF;i++){ if($i~/[^a-zA-Z0-9]/) { w[$i]++} } }END{asorti(w, sorted); for(i in sorted) print sorted[i],w[sorted[i]]}' subtitles_fr_sentences.txt
 # TODO: sentences starting with: '<space>, where ' is not used as apostroph
 # TODO: Same spelling, but without accents: 'Ca va'
 # TODO: remove duplicate movies, e.g. search in de: "Glauben Sie, wer anders"
-# TODO: UCTO tool to split sentences. Separate words from beginnings and endings? echo -e "   Halllo du wurst? Denkste. \n bla" | ucto -l -L de -P -n
-# TODO: colibri case sensitivity?
-# Failli] ?
-# [UNCUT]
-# (N'attendez-vous de moi ?
-# Il y en a tellement-- ((La Magra is coming !
-# Récupérer ce pouvoir{*puissance*} sur !
 
 
 DIR="$CORPUS_OUT"
 
-if [ ! -s "$DIR/tokens.reverse-index.tsv" ]; then
 echo "Encoding $DIR/sentences.txt ..."
 cat -n "$DIR/sentences.txt" | paste - "$DIR/tokens.txt" | sed 's/"/\\"/g' > "$DIR/sentences.tsv"
 colibri-classencode "$DIR/tokens.txt" -d "$DIR/"
@@ -111,13 +100,10 @@ echo "Creating reverse-index..."
 
 # TODO: remove sentences which contain untracked patterns
 colibri-patternmodeller --inputmodel "$DIR/tokens.colibri.indexedpatternmodel" --classfile "$DIR/tokens.colibri.cls" -P 2> /dev/null | tail -n +2 | sed 's/"/\\"/g' | awk -v FS=$'\t' -v OFS=$'\t' '{split($9, positions, " "); for(pos in positions) { split(positions[pos], senpos, ":"); print senpos[1], senpos[2], $1 }}' 1> "$DIR/tokens.reverse-index.tsv"
-fi
 
 
-if [ ! -s "$DIR/${LANG}_model.sqlite" ]; then
 echo "Creating sqlite database"
 ./import-data-sqlite.sh "$DIR/${LANG}_model.sqlite" "$DIR/sentences.tsv" "$DIR/tokens.patterns.tsv" "$DIR/tokens.reverse-index.tsv" "$LANG" || true
-fi
 
 
 echo "translating model"
