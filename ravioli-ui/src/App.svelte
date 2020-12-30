@@ -152,6 +152,7 @@
 
     const matchedPatterns: Observable<Array<{
         pattern: string;
+        regex: RegExp;
         matched: boolean;
     }>> = combineLatest([
         userInput,
@@ -164,13 +165,18 @@
                     currentSentence
                 );
                 const matched = regex.test(userInput);
-                return { pattern: pattern.pattern, matched: matched };
+                return {
+                    pattern: pattern.pattern,
+                    regex: regex,
+                    matched: matched,
+                };
             })
         ),
         share(),
         startWith(
             new Array<{
                 pattern: string;
+                regex: RegExp;
                 matched: boolean;
             }>()
         )
@@ -213,9 +219,10 @@
     });
 
     pressedEnter
-        .pipe(withLatestFrom(allPatternsMatch))
-        .forEach(([_, allPatternsMatch]) => {
+        .pipe(withLatestFrom(allPatternsMatch, matchedPatterns))
+        .forEach(([_, allPatternsMatch, matchedPatterns]) => {
             console.log("--------------------------");
+            console.log(matchedPatterns);
             if (showDiff) finishCurrentSentence.next();
             else {
                 if (allPatternsMatch) {
