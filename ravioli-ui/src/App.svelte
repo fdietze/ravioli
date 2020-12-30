@@ -41,8 +41,8 @@
 
     const lang = new ReplaySubject<string>(1);
     const nativeLang = new ReplaySubject<string>(1);
-    lang.next("fra");
-    nativeLang.next("deu");
+    /* lang.next("fra"); */
+    /* nativeLang.next("deu"); */
 
     const available_languages: Array<{
         lang: string;
