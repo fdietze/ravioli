@@ -42,11 +42,11 @@ if [ ! -s "$CORPUS_OUT/sentences.txt" ]; then
     (
     cat "$OUT/${LANG}.txt" |
         ./normalize_unicode.sh |
-        $PRUNE_COMMAND |
         $CLEANUP_COMMAND |
         $PRUNE_COMMAND |
-        $CLEANUP_COMMAND | # cleanup twice is intentional (only once doesn't capture everything)
+        $CLEANUP_COMMAND | # cleanup twice is intentional (only once might not capture everything)
         $PRUNE_COMMAND |
+        awk '{ if (length($0) < '"$MAX_SENTENCE_LENGTH"') print }' |
         # ./sentences_stanza.py "$LANG2" |
         pv --line-mode -s "$CORPUS_SENTENCE_LIMIT" |
         head -"$CORPUS_SENTENCE_LIMIT" |
