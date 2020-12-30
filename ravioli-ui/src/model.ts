@@ -21,7 +21,7 @@ export function getNextSentenceId(db: SqlJs.Database): string {
   console.log(`getNextSentenceId()`);
   const SENTENCESCOREFN = '((1/s_coverage) + AVG(1/p_coverage*(p_proficiency+1)*(p_proficiency+1)))/matched_patterns' // default proficiency is 0
   const POTENTIAL_SENTENCE_LIMIT = 100;
-  const PATTERN_LIMIT = 2;
+  const PATTERN_LIMIT = 1;
 
   const SELECT_NEXT_PATTERNS = `SELECT p.pattern FROM patterns p WHERE next_test <= (SELECT time FROM tick LIMIT 1) ORDER BY p.score ASC LIMIT ${PATTERN_LIMIT}`
   const SELECT_POTENTIAL_SENTENCES = `SELECT r.sentenceid, COUNT(DISTINCT p.pattern) as matched_patterns FROM reverseindex r JOIN sentences s ON s.sentenceid = r.sentenceid JOIN patterns p ON r.pattern = p.pattern WHERE p.pattern IN next_patterns GROUP BY r.sentenceid ORDER BY s.coverage DESC LIMIT ${POTENTIAL_SENTENCE_LIMIT}`
