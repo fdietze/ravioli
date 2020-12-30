@@ -197,6 +197,7 @@ EOF
     <(extract-clean-sentences "$COMBO" "$LANGA") \
     <(extract-clean-sentences "$COMBO" "$LANGB") || true) |
     (rg '.+	.+' || true) | # remove lines where one side is empty
+    ./prune_default.sh |
     head "-$LIMIT" |
     pv --line-mode -s "$LIMIT" |
     sqlite3 "$SQLITEDB" --init <(echo "$SQL_IMPORT")
