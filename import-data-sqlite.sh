@@ -60,6 +60,10 @@ SELECT '  -' || changes(*);
 DROP TABLE rawsentences;
 
 
+SELECT "remove duplicate sentences only different in case...";
+DELETE FROM sentences WHERE sentenceid NOT IN (SELECT FIRST_VALUE(sentenceid) OVER (partitiON BY LOWER(sentence) ORDER BY coverage DESC) FROM sentences);
+
+
 SELECT "removing untranslatable sentences...";
 attach '$TRANSLATIONFILE' as tr;
 DELETE FROM sentences WHERE sentenceid IN
