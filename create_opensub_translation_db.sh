@@ -48,7 +48,18 @@ for ((idxA=0; idxA<max; idxA++)); do
     echo -e "\n\n"
 done
 finish $MIN_OCCURRENCES $SQLITEDB
+
 ln -s --force "$(basename "$SQLITEDB")" "$TRANS_OUT/translations.sqlite"
+for ((idxA=0; idxA<max; idxA++)); do
+    LANGA=${LANGUAGES[$idxA]}
+    ln -s --force "$(basename "$SQLITEDB")" "$TRANS_OUT/$LANGA.sqlite"
+    for ((idxB=idxA+1; idxB<max; idxB++)); do
+        LANGB=${LANGUAGES[$idxB]}
+        COMBO=$LANGA-$LANGB
+        ln -s --force "$(basename "$SQLITEDB")" "$TRANS_OUT/$COMBO.sqlite"
+        i=$((i+1))
+    done
+done
 }
 
 download-corpora() {
