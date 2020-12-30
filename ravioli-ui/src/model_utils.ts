@@ -1,6 +1,10 @@
 import {shuffleArray, regExpEscape} from './utils'
 
-export function modelPatternToRegExp(pattern: string, currentSentence: string): RegExp {
+export function modelPatternToRegExp(rawPattern: string, currentSentence: string): RegExp {
+  // remove punctuation from beginning and end of pattern
+  let pattern = rawPattern.replace(/\s*[\.!?]$/, '');
+  pattern = pattern.replace(/^¿\s*$/, '');
+
   let wildCardRegExp = new RegExp(/\{\*+\}/);
   let patternParts = pattern.split(" ").map((p) => {
     let isWildCard = wildCardRegExp.test(p);
@@ -11,7 +15,7 @@ export function modelPatternToRegExp(pattern: string, currentSentence: string): 
   // only put spaces in the regex, if they are spaces in the real sentence.
   let matches = currentSentence.match(regex);
 
-  const result = patternParts
+  let result = patternParts
     .map(
       (p, i) =>
         p + (i == patternParts.length - 1 ? "" : matches[1 + i])
@@ -19,11 +23,17 @@ export function modelPatternToRegExp(pattern: string, currentSentence: string): 
     .join("");
 
   // don't care about spaces before punctuation: TODO: Hey Mr. Dog.
-  const punctuationAdjustedResult = result.replace(
+  result = result.replace(
     /\s*(\\\?|\\\.|!)$/,
     "\\s*$1"
   );
-  return new RegExp(punctuationAdjustedResult);
+
+  // don't care about spaces after comma
+  result = result.replace(
+    /,\s*/,
+    ",\\s*"
+  );
+  return new RegExp(result);
 }
 
 
