@@ -3,3 +3,4 @@
 
 .DS_Store
 /public/languages/*.sqlite
+/.firebase/
