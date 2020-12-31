@@ -13,8 +13,9 @@ OUT="out"
 TRANS_OUT="$OUT/translations_opensub"
 mkdir -p $TRANS_OUT
 
+# http://opus.nlpl.eu/OpenSubtitles-v2018.php
 # LANGUAGES=('fr' 'de' 'pt' 'it' 'ru')
-LANGUAGES=('fr' 'de' 'pt' 'it' 'ru' 'es' 'en' 'nl' 'pl' 'ja' 'el')
+LANGUAGES=('fr' 'de' 'pt' 'it' 'ru' 'es' 'en' 'sv' 'ja')
 
 # sort languages
 IFS=$'\n' LANGUAGES=($(sort <<<"${LANGUAGES[*]}")); unset IFS
