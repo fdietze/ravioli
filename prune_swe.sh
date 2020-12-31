@@ -3,7 +3,7 @@ set -Eeuo pipefail # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_
 
 (cat - |
     ./prune_default.sh |
-    rg '[\.?!]$' |
+    grep '[\.?!]$' |
     rg '^\p{Lu}' | # must start with uppercase letter \p{Lu} = an uppercase letter that has a lowercase variant. (https://www.regular-expressions.info/unicode.html)
     cat
 ) || true # rg has non-zero exit code if no lines are matched

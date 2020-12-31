@@ -11,6 +11,5 @@ set -Eeuo pipefail # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_
     rg -v '\.\.+' | # more than one dot
     rg -v '^[[:space:][:punct:][:digit:]]*$' | # lines only consisting of spaces, punctuation and digits
     rg -v '[^[:space:]] * [-] * [^[:space:]]' |
-    rg '^\p{Lu}' | # must start with uppercase letter \p{Lu} = an uppercase letter that has a lowercase variant. (https://www.regular-expressions.info/unicode.html)
     cat
 ) || true # rg has non-zero exit code if no lines are matched
