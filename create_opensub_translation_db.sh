@@ -7,7 +7,7 @@ main() {
 # Optimizations
 # faster sed alternative for cleanup: https://github.com/chmln/sd
 
-LIMIT=${1-2000000}
+LIMIT=${1:-2000000}
 MIN_OCCURRENCES=4
 OUT="out"
 TRANS_OUT="$OUT/translations_opensub"

@@ -5,7 +5,7 @@ shopt -s expand_aliases
 SOURCE_LANG=$1
 TARGET_LANG=$2
 TEXT=$3
-ENGINE=${4-google}
+ENGINE=${4:-google}
 
 CACHEFILE="$HOME/.cache/trans_cache.sqlite"
 q() { sqlite3 -column -init "" "$CACHEFILE" "$@"; }

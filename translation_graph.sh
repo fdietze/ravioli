@@ -6,7 +6,7 @@ set -Eeuo pipefail # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_
 
 ALLTRANSLATIONSFILE=$1
 STARTSENTENCE=$2
-LIMIT=${3-100}
+LIMIT=${3:-100}
 
 q() { sqlite3 -column -init "" "$ALLTRANSLATIONSFILE" "$@"; }
 

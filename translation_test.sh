@@ -2,10 +2,10 @@
 set -Eeuo pipefail # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/#:~:text=set%20%2Du,is%20often%20highly%20desirable%20behavior.
 # shopt -s expand_aliases
 
-DBFILE=${1-"out/translations/translations.sqlite"}
-SOURCELANG=${2-'fra'}
-TARGETLANG=${3-'deu'}
-SENTENCE=${4-'Salut.'}
+DBFILE=${1:-"out/translations_opensub/translations.sqlite"}
+SOURCELANG=${2:-'fra'}
+TARGETLANG=${3:-'deu'}
+SENTENCE=${4:-'Salut.'}
 MIN_COVERAGE=0.5
 
 SENTENCE=$(echo "${SENTENCE//\'/\'\'}" | ./normalize_unicode.sh) # escape single quotes for sqlite
