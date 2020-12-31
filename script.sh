@@ -55,16 +55,6 @@ cat "$OUT/${LANG}.txt" |
 ) || true # piping through python makes problems
 
 
-(
-# https://www.regular-expressions.info/posixbrackets.html
-# https://www.regular-expressions.info/unicode.html
-declare -a character_classes=("[[:alpha:]]" "[[:digit:]]" "[[:punct:]]" "[^[:space:][[:alpha:][:digit:]][:punct:]]")
-for i in "${character_classes[@]}"
-do
-   echo -e "\nCharacter distribution for '$i' (top 200):"
-   rg -o "$i" "$CORPUS_OUT/sentences.txt" | sort | uniq -c | sort -rn | head -200 | awk 'BEGIN {ORS=""} {printf "%-10s %s  ", $1, $2; system("rg --fixed-strings --max-count 1 \""$2"\" '"$CORPUS_OUT/sentences.txt"'")}'
-done
-) || true
 
 
 
