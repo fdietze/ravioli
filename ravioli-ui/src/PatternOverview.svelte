@@ -1,4 +1,5 @@
 <script type="text/typescript">
+    import { classes } from "./classes";
     export let data: Array<{
         pattern: string;
         rank: number;
@@ -11,13 +12,7 @@
     {#each data as pattern (pattern.rank)}
         <div
             title={pattern.pattern}
-            class="h-full"
-            class:bg-green-500={pattern.proficiency > 0}
-            class:bg-red-500={pattern.proficiency < 0}
-            class:bg-opacity-0={pattern.proficiency == 0}
-            class:bg-opacity-25={Math.abs(pattern.proficiency) == 1}
-            class:bg-opacity-50={Math.abs(pattern.proficiency) == 2}
-            class:bg-opacity-75={Math.abs(pattern.proficiency) == 3}
-            class:bg-opacity-100={Math.abs(pattern.proficiency) > 3} />
+            use:classes={{ 'bg-green-500': pattern.proficiency > 0, 'bg-red-500': pattern.proficiency < 0, 'bg-opacity-0': pattern.proficiency == 0, 'bg-opacity-25': Math.abs(pattern.proficiency) == 1, 'bg-opacity-50': Math.abs(pattern.proficiency) == 2, 'bg-opacity-75': Math.abs(pattern.proficiency) == 3, 'bg-opacity-100': Math.abs(pattern.proficiency) > 3 }}
+            class="h-full" />
     {/each}
 </main>
