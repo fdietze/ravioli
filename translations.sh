@@ -87,8 +87,6 @@ FROM (
     )
 )
 WHERE cumulative - prob <= $MIN_COVERAGE
-
-
 ;
 
 
@@ -114,6 +112,7 @@ WHERE cumulative - prob <= $MIN_COVERAGE
 -- HAVING COUNT(distinct pivot_lang) >= 2
 -- ORDER BY probability DESC
 -- ;
+;
 
 
 EOF
