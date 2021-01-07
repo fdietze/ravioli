@@ -5,28 +5,38 @@ set -Eeuo pipefail # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_
 DBFILE=${1:-"out/translations_opensub/translations.sqlite"}
 SOURCELANG=${2:-'fra'}
 TARGETLANG=${3:-'deu'}
-SENTENCE=${4:-'Salut.'}
+SEARCHTERM=${4:-'Salut.'}
 MIN_COVERAGE=0.5
 
-SENTENCE=$(echo "${SENTENCE//\'/\'\'}" | ./normalize_unicode.sh) # escape single quotes for sqlite
+SEARCHTERM=$(echo "${SEARCHTERM//\'/\'\'}" | ./normalize_unicode.sh) # escape single quotes for sqlite
 
-cat << EOF | sqlite3 -init "" "$DBFILE"
-.mode column
-.headers on
 
-SELECT sentenceid, sentence
+SENTENCES=$(cat << EOF | sqlite3 -init "" "$DBFILE"
+.mode tabs
+.headers off
+
+SELECT sentenceid, occurrences, sentence
 FROM sentences
-WHERE
-    sentence = '$SENTENCE' AND lang = '$SOURCELANG'
-;
-EOF
+WHERE lang = '$SOURCELANG' and sentence LIKE '$SEARCHTERM'
+ORDER BY occurrences DESC LIMIT 20;
 
-echo ""
+EOF
+)
+echo "$SENTENCES"
+
+SENTENCEID=$(echo "$SENTENCES" | head -1 | cut -f1)
+SENTENCE=$(echo "$SENTENCES" | head -1 | cut -f3-)
+
+if [ -z "$SENTENCES" ]; then
+    exit 1;
+fi
+
+echo -e "\nTranslating: '$SENTENCE' ($SOURCELANG) -> $TARGETLANG\n"
 
 cat << EOF | sqlite3 -init "" "$DBFILE"
 .mode column
 .headers on
--- .width auto auto auto
+.width 60 auto auto
 
 .output /dev/null
 PRAGMA journal_mode = OFF;
@@ -48,10 +58,9 @@ FROM (
     SELECT sentence, probability, SUM(probability) OVER (ROWS UNBOUNDED PRECEDING) as cumulative
     FROM (
         SELECT t.sentence, probability
-        FROM sentences s
-        JOIN direct_translations d ON d.sourceid = s.sentenceid
+        FROM direct_translations d
         JOIN sentences t ON t.sentenceid = d.targetid
-        WHERE d.lang = '$TARGETLANG' AND s.sentence = '$SENTENCE' AND s.lang = '$SOURCELANG'
+        WHERE d.lang = '$TARGETLANG' AND d.sourceid = '$SENTENCEID'
         ORDER BY probability DESC
     )
 )
@@ -71,16 +80,14 @@ SELECT "indirect translations:";
 
 
 -- EXPLAIN QUERY PLAN
-SELECT sentence, prob, cumulative
+SELECT sentence, prob as probability, cumulative
 FROM (
     SELECT sentenceid, sentence, prob, SUM(prob) OVER (ROWS UNBOUNDED PRECEDING) as cumulative
     FROM (
         SELECT ts.sentenceid, ts.sentence, sum(probability) as prob
-        FROM sentences s
-        JOIN indirect_translations_ungrouped t
-            ON t.sourceid = s.sentenceid AND t.lang = '$TARGETLANG'
+        FROM indirect_translations_ungrouped t
         JOIN sentences ts ON ts.sentenceid = t.targetid
-        WHERE s.sentence = '$SENTENCE' AND s.lang = '$SOURCELANG'
+        WHERE t.sourceid = '$SENTENCEID' AND t.lang = '$TARGETLANG'
         GROUP BY t.targetid
         HAVING COUNT(DISTINCT pivot_lang) >= 2
         ORDER BY prob DESC
